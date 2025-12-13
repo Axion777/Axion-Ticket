@@ -1,4 +1,4 @@
-// index.js (النسخة النهائية: بريفكس -setup + دعم Render Free Plan)
+// index.js (النسخة النهائية والمصححة: بريفكس -setup + دعم Render Free Plan)
 
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
 const express = require('express');
@@ -34,6 +34,12 @@ const SERVICE_OPTIONS = {
         emoji: '✅',
         categoryName: 'تثبيت-حسابات'
     },
+    'general_ticket': { 
+        label: '🎫 تكت عام/استفسار',
+        description: 'للاستفسارات العامة أو الطلبات غير المدرجة.',
+        emoji: '🎫',
+        categoryName: 'تكت-عام'
+    }
 };
 
 // ===============================================
@@ -54,16 +60,7 @@ function createComponents() {
         );
 
     const selectRow = new ActionRowBuilder().addComponents(selectMenu);
-
-    const button = new ButtonBuilder()
-        .setCustomId('open_ticket_button')
-        .setLabel('فتح تكت جديد')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('🎫');
-
-    const buttonRow = new ActionRowBuilder().addComponents(button);
-
-    return [selectRow, buttonRow];
+    return [selectRow]; 
 }
 
 function createTicketComponents() {
@@ -103,12 +100,16 @@ client.on('messageCreate', async message => {
             return message.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).'});
         }
 
+        // تم تصحيح طريقة عرض حقل الخدمات لتجنب التكرار
+        const serviceList = Object.values(SERVICE_OPTIONS).map(opt => `${opt.emoji} **${opt.label}**: ${opt.description}`).join('\n');
+        
         const setupEmbed = new EmbedBuilder()
             .setColor('#0099ff')
             .setTitle('🎫 نظام التكتات والخدمات')
-            .setDescription('**مرحباً بك!**\n\nلطلب إحدى خدماتنا، يرجى اختيار نوع الخدمة المطلوبة من القائمة المنسدلة أدناه، أو الضغط على زر **"فتح تكت جديد"** لفتح تكت عام.\n\nسيتم فتح قناة خاصة لك وللمسؤولين للحديث حول طلبك.')
+            .setThumbnail(message.guild.iconURL({ dynamic: true }))
+            .setDescription('**مرحباً بك!**\n\nلطلب إحدى خدماتنا، يرجى اختيار نوع الخدمة المطلوبة من القائمة المنسدلة أدناه.\n\nسيتم فتح قناة خاصة لك وللمسؤولين للحديث حول طلبك.')
             .addFields(
-                { name: '💻 خدماتنا المتاحة:', value: Object.values(SERVICE_OPTIONS).map(opt => `${opt.emoji} ${opt.label}`).join('\n'), inline: false },
+                { name: '💻 خدماتنا المتاحة:', value: serviceList, inline: false }, // استخدام القائمة المصححة
                 { name: '⚠️ ملاحظة:', value: 'الرجاء توضيح طلبك بتفصيل بمجرد فتح التكت لتسريع عملية التنفيذ.', inline: false }
             )
             .setTimestamp()
@@ -132,9 +133,7 @@ client.on('messageCreate', async message => {
 // التعامل مع التفاعلات (القائمة المنسدلة والأزرار) 
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
-        if (interaction.customId === 'open_ticket_button') {
-            await openTicket(interaction, 'general_ticket');
-        } else if (interaction.customId === 'close_ticket') {
+        if (interaction.customId === 'close_ticket') {
             await handleTicketClose(interaction);
         } else if (interaction.customId === 'claim_ticket') {
             await handleTicketClaim(interaction);
