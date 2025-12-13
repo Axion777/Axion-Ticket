@@ -1,4 +1,4 @@
-// index.js (النسخة النهائية والمصححة: بريفكس -setup + دعم Render Free Plan)
+// index.js (النسخة النهائية والمعدلة للأرشفة)
 
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
 const express = require('express');
@@ -12,6 +12,9 @@ const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID;
 const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID; 
 const PREFIX = '-'; // علامة البريفكس
 
+// مُعرف فئة الأرشيف الجديدة
+const ARCHIVE_CATEGORY_ID = '1449459496144470056'; 
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -23,19 +26,19 @@ const client = new Client({
 
 const SERVICE_OPTIONS = {
     'programming_services': {
-        label: '💻 طلب خدمات برمجية',
+        label: ' طلب خدمات برمجية',
         description: 'اطلب تطوير بوتات، مواقع، أو سكربتات خاصة.',
         emoji: '💻',
         categoryName: 'خدمات-برمجية'
     },
     'account_installation': {
-        label: '✅ تثبيت حسابات ديسكورد',
+        label: ' تثبيت حسابات ديسكورد',
         description: 'اطلب تثبيت حسابك/حساباتك في ديسكورد.',
         emoji: '✅',
         categoryName: 'تثبيت-حسابات'
     },
     'general_ticket': { 
-        label: '🎫 تكت عام/استفسار',
+        label: ' تكت عام/استفسار',
         description: 'للاستفسارات العامة أو الطلبات غير المدرجة.',
         emoji: '🎫',
         categoryName: 'تكت-عام'
@@ -100,7 +103,6 @@ client.on('messageCreate', async message => {
             return message.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).'});
         }
 
-        // تم تصحيح طريقة عرض حقل الخدمات لتجنب التكرار
         const serviceList = Object.values(SERVICE_OPTIONS).map(opt => `${opt.emoji} **${opt.label}**: ${opt.description}`).join('\n');
         
         const setupEmbed = new EmbedBuilder()
@@ -109,7 +111,7 @@ client.on('messageCreate', async message => {
             .setThumbnail(message.guild.iconURL({ dynamic: true }))
             .setDescription('**مرحباً بك!**\n\nلطلب إحدى خدماتنا، يرجى اختيار نوع الخدمة المطلوبة من القائمة المنسدلة أدناه.\n\nسيتم فتح قناة خاصة لك وللمسؤولين للحديث حول طلبك.')
             .addFields(
-                { name: '💻 خدماتنا المتاحة:', value: serviceList, inline: false }, // استخدام القائمة المصححة
+                { name: '💻 خدماتنا المتاحة:', value: serviceList, inline: false }, 
                 { name: '⚠️ ملاحظة:', value: 'الرجاء توضيح طلبك بتفصيل بمجرد فتح التكت لتسريع عملية التنفيذ.', inline: false }
             )
             .setTimestamp()
@@ -210,32 +212,43 @@ async function handleTicketClose(interaction) {
     }
 
     try {
-        await channel.send(`🔒 جاري إغلاق التكت بواسطة: ${interaction.user}...\nسيتم حذف هذه القناة خلال 5 ثوانٍ.`);
+        await channel.send(`🔒 **تم إغلاق التكت بواسطة: ${interaction.user}**\nجاري أرشفة القناة ونقلها إلى سجلات السيرفر.`);
+        
+        // 1. إزالة صلاحية المشاهدة عن صاحب التكت
+        // (إذا كان صاحب التكت لا يزال في السيرفر)
+        await channel.permissionOverwrites.edit(ticketOwnerId, {
+            ViewChannel: false
+        }).catch(() => console.log('تعذر تعديل صلاحيات صاحب التكت (قد يكون غادر).'));
 
+        // 2. نقل القناة إلى فئة الأرشيف
+        await channel.setParent(ARCHIVE_CATEGORY_ID, { lockPermissions: false });
+        
+        // 3. تعديل اسم القناة للإشارة إلى أنها مغلقة
+        await channel.setName(`closed-${channel.name}`);
+
+        // 4. إرسال سجل الأرشفة
         const logsChannel = interaction.guild.channels.cache.get(LOGS_CHANNEL_ID);
         if (logsChannel) {
             const ticketOwner = await interaction.guild.members.fetch(ticketOwnerId).catch(() => 'المستخدم غير موجود');
 
             const logEmbed = new EmbedBuilder()
                 .setColor('#ff0000')
-                .setTitle('📄 سجل إغلاق تكت')
+                .setTitle('📄 سجل أرشفة تكت')
                 .addFields(
                     { name: 'صاحب التكت', value: `<@${ticketOwnerId}> (${ticketOwnerId})`, inline: true },
                     { name: 'اسم التكت', value: channel.name, inline: true },
-                    { name: 'المغلق', value: interaction.user.tag, inline: true }
+                    { name: 'المغلق/المؤرشف', value: interaction.user.tag, inline: true }
                 )
                 .setTimestamp();
 
             await logsChannel.send({ embeds: [logEmbed] });
         }
-
-        setTimeout(async () => {
-            await channel.delete('تم إغلاق التكت بواسطة المسؤول.');
-        }, 5000);
+        
+        await interaction.editReply({ content: `✅ تم إغلاق التكت وأرشفته بنجاح في <#${ARCHIVE_CATEGORY_ID}>.`, ephemeral: true });
 
     } catch (error) {
-        console.error('فشل في إغلاق التكت:', error);
-        await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة إغلاق التكت.', ephemeral: true });
+        console.error('فشل في إغلاق وأرشفة التكت:', error);
+        await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة إغلاق وأرشفة التكت. تأكد من صحة مُعرف فئة الأرشيف وصلاحيات البوت.', ephemeral: true });
     }
 }
 
