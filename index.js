@@ -1,15 +1,15 @@
-// index.js (النسخة النهائية الجاهزة للنسخ واللصق)
+// index.js
 
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
 
 // ===============================================
-// 1. المتغيرات والتهيئة - يجب تعديل القيم بين الأقواس المثلثة
+// 1. المتغيرات والتهيئة - يعتمد على متغيرات Render
 // ===============================================
 
-// *** قم بتعديل القيم أدناه ببيانات البوت والقناة الخاصة بك ***
-const BOT_TOKEN = "<توكن-البوت-الخاص-بك>"; // ضع توكن البوت هنا مباشرة
-const MANAGER_ROLE_ID = "1449429074585063446"; // مُعرّف (ID) رتبة المسؤولين (التي زودتنا بها)
-const LOGS_CHANNEL_ID = "<مُعرّف-قناة-السجلات>"; // مُعرّف (ID) قناة اللوغز/السجلات
+// البوت سيقرأ التوكن والمعرفات من قسم Environment Variables في Render
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID; // 1449429074585063446
+const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID; 
 
 const client = new Client({
     intents: [
@@ -20,7 +20,6 @@ const client = new Client({
     ]
 });
 
-// تعريف خيارات القائمة المنسدلة والتكتات المقابلة
 const SERVICE_OPTIONS = {
     'programming_services': {
         label: '💻 طلب خدمات برمجية',
@@ -34,16 +33,12 @@ const SERVICE_OPTIONS = {
         emoji: '✅',
         categoryName: 'تثبيت-حسابات'
     },
-    // يمكنك إضافة خيارات أخرى هنا بنفس الطريقة
 };
 
 // ===============================================
 // 2. الدوال المساعدة
 // ===============================================
 
-/**
- * دالة إنشاء مكونات الرسالة الرئيسية (القائمة والزر)
- */
 function createComponents() {
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('service_select_menu')
@@ -70,9 +65,6 @@ function createComponents() {
     return [selectRow, buttonRow];
 }
 
-/**
- * دالة إنشاء مكونات التكت (الأزرار داخل قناة التكت)
- */
 function createTicketComponents() {
     const closeButton = new ButtonBuilder()
         .setCustomId('close_ticket')
@@ -98,12 +90,8 @@ client.on('ready', () => {
     client.user.setActivity('فتح التكتات | /setup', { type: 3 });
 });
 
-
-// إنشاء أمر سلاش لنشر رسالة الإعداد
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    if (interaction.commandName === 'setup') {
+    if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return interaction.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).', ephemeral: true });
         }
@@ -129,13 +117,7 @@ client.on('interactionCreate', async interaction => {
             console.error('فشل في إرسال رسالة الإعداد:', error);
             await interaction.reply({ content: '❌ حدث خطأ أثناء إرسال رسالة الإعداد.', ephemeral: true });
         }
-    }
-});
-
-
-// التعامل مع التفاعلات (القائمة المنسدلة والأزرار)
-client.on('interactionCreate', async interaction => {
-    if (interaction.isButton()) {
+    } else if (interaction.isButton()) {
         if (interaction.customId === 'open_ticket_button') {
             await openTicket(interaction, 'general_ticket');
         } else if (interaction.customId === 'close_ticket') {
@@ -143,7 +125,6 @@ client.on('interactionCreate', async interaction => {
         } else if (interaction.customId === 'claim_ticket') {
             await handleTicketClaim(interaction);
         }
-
     } else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'service_select_menu') {
             const selectedValue = interaction.values[0];
@@ -152,16 +133,12 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-/**
- * دالة فتح التكت
- */
 async function openTicket(interaction, serviceKey) {
     await interaction.deferReply({ ephemeral: true });
 
     const guild = interaction.guild;
     const member = interaction.member;
 
-    // منع فتح تكتات متعددة (اختياري)
     const existingTicket = guild.channels.cache.find(c =>
         c.name.startsWith(`ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`) && c.topic === member.user.id
     );
@@ -173,7 +150,6 @@ async function openTicket(interaction, serviceKey) {
     const channelName = serviceInfo ? `${serviceInfo.categoryName.toLowerCase()}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}` : `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
     try {
-        // إنشاء قناة التكت
         const ticketChannel = await guild.channels.create({
             name: channelName.substring(0, 100),
             type: ChannelType.GuildText,
@@ -186,14 +162,12 @@ async function openTicket(interaction, serviceKey) {
             ],
         });
 
-        // رسالة التكت الأولى
         const ticketEmbed = new EmbedBuilder()
             .setColor(serviceInfo ? '#00ff00' : '#ffff00')
             .setTitle(`🎫 تكت جديد: ${serviceInfo ? serviceInfo.label : 'تكت عام'}`)
             .setDescription(`**مرحباً بك يا ${member}!**\n\nيرجى وصف طلبك بالتفصيل هنا. سيتم التواصل معك من قِبل المسؤولين قريباً.\n\n${serviceInfo ? `**نوع الخدمة المطلوبة:** ${serviceInfo.label}` : ''}`)
             .setTimestamp();
 
-        // إرسال الرسالة مع منشن للمسؤولين
         await ticketChannel.send({
             content: `${member} | منشن المسؤولين: <@&${MANAGER_ROLE_ID}>`,
             embeds: [ticketEmbed],
@@ -208,9 +182,6 @@ async function openTicket(interaction, serviceKey) {
     }
 }
 
-/**
- * دالة للتحكم في إغلاق التكت
- */
 async function handleTicketClose(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
@@ -255,9 +226,6 @@ async function handleTicketClose(interaction) {
     }
 }
 
-/**
- * دالة لتولي (Claim) التكت
- */
 async function handleTicketClaim(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
@@ -268,18 +236,15 @@ async function handleTicketClaim(interaction) {
     const channel = interaction.channel;
     const managerRole = interaction.guild.roles.cache.get(MANAGER_ROLE_ID);
 
-    // إزالة صلاحية الرؤية من رتبة المسؤولين
     await channel.permissionOverwrites.edit(managerRole, {
         ViewChannel: false
     });
 
-    // إضافة صلاحية الرؤية للمسؤول الذي تولى التكت
     await channel.permissionOverwrites.edit(interaction.user.id, {
         ViewChannel: true,
         SendMessages: true
     });
 
-    // تعديل مكونات الرسالة لإزالة زر "تولي التكت"
     const newComponents = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('close_ticket')
@@ -288,7 +253,6 @@ async function handleTicketClaim(interaction) {
             .setEmoji('🔒')
     );
 
-    // تعديل الرسالة وإرسال إشعار
     await interaction.message.edit({ components: [newComponents] });
 
     await channel.send(`**✋ تم تولي هذا التكت بنجاح بواسطة ${interaction.user}!**\nسيتم التعامل مع طلبك قريباً.`).then(m => m.pin());
