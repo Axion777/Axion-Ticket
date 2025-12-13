@@ -1,4 +1,4 @@
-// index.js
+// index.js (باستخدام أمر البريفكس: -setup)
 
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
 
@@ -6,16 +6,16 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 // 1. المتغيرات والتهيئة - يعتمد على متغيرات Render
 // ===============================================
 
-// البوت سيقرأ التوكن والمعرفات من قسم Environment Variables في Render
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID; // 1449429074585063446
+const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID;
 const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID; 
+const PREFIX = '-'; // علامة البريفكس الجديدة
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.MessageContent, // مهم لقراءة الأوامر بالبريفكس
         GatewayIntentBits.GuildMembers,
     ]
 });
@@ -87,13 +87,19 @@ function createTicketComponents() {
 
 client.on('ready', () => {
     console.log(`✅ البوت جاهز! تم تسجيل الدخول باسم: ${client.user.tag}`);
-    client.user.setActivity('فتح التكتات | /setup', { type: 3 });
+    client.user.setActivity(`فتح التكتات | ${PREFIX}setup`, { type: 3 });
 });
 
-client.on('interactionCreate', async interaction => {
-    if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).', ephemeral: true });
+// التعامل مع أمر البريفكس الجديد (-setup)
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
+
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    if (commandName === 'setup') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).'});
         }
 
         const setupEmbed = new EmbedBuilder()
@@ -108,16 +114,23 @@ client.on('interactionCreate', async interaction => {
             .setFooter({ text: client.user.username, iconURL: client.user.displayAvatarURL() });
 
         try {
-            await interaction.channel.send({
+            await message.channel.send({
                 embeds: [setupEmbed],
                 components: createComponents()
             });
-            await interaction.reply({ content: '✅ تم إرسال رسالة إعداد نظام التكتات بنجاح!', ephemeral: true });
+            await message.delete().catch(() => {}); // حذف رسالة الأمر
+            await message.channel.send({ content: '✅ تم إرسال رسالة إعداد نظام التكتات بنجاح!' }).then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
         } catch (error) {
             console.error('فشل في إرسال رسالة الإعداد:', error);
-            await interaction.reply({ content: '❌ حدث خطأ أثناء إرسال رسالة الإعداد.', ephemeral: true });
+            await message.reply({ content: '❌ حدث خطأ أثناء إرسال رسالة الإعداد.' });
         }
-    } else if (interaction.isButton()) {
+    }
+});
+
+
+// التعامل مع التفاعلات (القائمة المنسدلة والأزرار) - هذا الجزء لا يزال يستخدم Interaction
+client.on('interactionCreate', async interaction => {
+    if (interaction.isButton()) {
         if (interaction.customId === 'open_ticket_button') {
             await openTicket(interaction, 'general_ticket');
         } else if (interaction.customId === 'close_ticket') {
@@ -259,28 +272,6 @@ async function handleTicketClaim(interaction) {
 
     await interaction.editReply({ content: '✅ تم تولي التكت بنجاح. الآن أنت المسؤول الوحيد عن هذا التكت (من جانب الإدارة).', ephemeral: true });
 }
-
-// ===============================================
-// 4. تسجيل أمر السلاش 
-// ===============================================
-
-client.on('ready', async () => {
-    const commands = [
-        {
-            name: 'setup',
-            description: 'ينشر رسالة نظام التكتات الرئيسية.',
-            default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
-        },
-    ];
-
-    try {
-        await client.application.commands.set(commands);
-        console.log('✅ تم تسجيل أوامر السلاش بنجاح.');
-    } catch (error) {
-        console.error('فشل في تسجيل أوامر السلاش:', error);
-    }
-});
-
 
 // ===============================================
 // 5. تسجيل الدخول
