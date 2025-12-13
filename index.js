@@ -1,6 +1,7 @@
-// index.js (باستخدام أمر البريفكس: -setup)
+// index.js (النسخة النهائية: بريفكس -setup + دعم Render Free Plan)
 
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
+const express = require('express');
 
 // ===============================================
 // 1. المتغيرات والتهيئة - يعتمد على متغيرات Render
@@ -9,13 +10,13 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID;
 const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID; 
-const PREFIX = '-'; // علامة البريفكس الجديدة
+const PREFIX = '-'; // علامة البريفكس
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // مهم لقراءة الأوامر بالبريفكس
+        GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
     ]
 });
@@ -82,7 +83,7 @@ function createTicketComponents() {
 }
 
 // ===============================================
-// 3. أحداث البوت
+// 3. أحداث البوت (Commands & Interactions)
 // ===============================================
 
 client.on('ready', () => {
@@ -90,7 +91,7 @@ client.on('ready', () => {
     client.user.setActivity(`فتح التكتات | ${PREFIX}setup`, { type: 3 });
 });
 
-// التعامل مع أمر البريفكس الجديد (-setup)
+// التعامل مع أمر البريفكس (-setup)
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
 
@@ -118,7 +119,7 @@ client.on('messageCreate', async message => {
                 embeds: [setupEmbed],
                 components: createComponents()
             });
-            await message.delete().catch(() => {}); // حذف رسالة الأمر
+            await message.delete().catch(() => {});
             await message.channel.send({ content: '✅ تم إرسال رسالة إعداد نظام التكتات بنجاح!' }).then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
         } catch (error) {
             console.error('فشل في إرسال رسالة الإعداد:', error);
@@ -128,7 +129,7 @@ client.on('messageCreate', async message => {
 });
 
 
-// التعامل مع التفاعلات (القائمة المنسدلة والأزرار) - هذا الجزء لا يزال يستخدم Interaction
+// التعامل مع التفاعلات (القائمة المنسدلة والأزرار) 
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         if (interaction.customId === 'open_ticket_button') {
@@ -274,6 +275,23 @@ async function handleTicketClaim(interaction) {
 }
 
 // ===============================================
-// 5. تسجيل الدخول
+// 4. تسجيل الدخول
 // ===============================================
+
 client.login(BOT_TOKEN);
+
+
+// ===============================================
+// 5. تشغيل خادم وهمي (Mock Server) لـ Render Free Plan
+// ===============================================
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('Discord Bot is running and healthy!');
+});
+
+app.listen(port, () => {
+    console.log(`Web Server listening on port ${port}`);
+});
