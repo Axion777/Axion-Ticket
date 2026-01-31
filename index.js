@@ -8,7 +8,7 @@ const axios = require('axios');
 // 1. المتغيرات - مباشرة في الكود
 // ===============================================
 
-const BOT_TOKEN = 'MTQ0OTQzMDc3NDQ1MjU4ODY5Nw.Gkc4gI.y371Do0B3FCsirGCAJU5Yn-m3OKz4ObDDNHk6A';
+const BOT_TOKEN = 'MTQ2NzA5NDkxMDk2NzQ4NDU1Mw.GUYXBk.J7LBIkstTVYBVqaBz68W_UnLqIx3S79rMFjxQ0';
 const MANAGER_ROLE_ID = '1449429074585063446';
 const LOGS_CHANNEL_ID = '1449444036824797334';
 const REQUESTS_ROOM_ID = '1449446245805457408';
