@@ -1,25 +1,19 @@
-// index.js (مع logs تفصيلية)
+// index.js (النسخة النهائية والمعدلة للأرشفة)
 
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
 const express = require('express');
-const axios = require('axios');
 
 // ===============================================
-// 1. المتغيرات والتهيئة
+// 1. المتغيرات والتهيئة - يعتمد على متغيرات Render
 // ===============================================
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID;
 const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID; 
-const PREFIX = '-';
-const ARCHIVE_CATEGORY_ID = process.env.ARCHIVE_CATEGORY_ID; 
-const IMAGE_URL = 'https://i.top4top.io/p_3683q7lu71.png';
+const PREFIX = '-'; // علامة البريفكس
 
-console.log('🔧 تحقق من المتغيرات:');
-console.log('BOT_TOKEN:', BOT_TOKEN ? 'موجود ✅' : 'مفقود ❌');
-console.log('MANAGER_ROLE_ID:', MANAGER_ROLE_ID ? MANAGER_ROLE_ID : 'مفقود ❌');
-console.log('LOGS_CHANNEL_ID:', LOGS_CHANNEL_ID ? LOGS_CHANNEL_ID : 'مفقود ❌');
-console.log('ARCHIVE_CATEGORY_ID:', ARCHIVE_CATEGORY_ID ? ARCHIVE_CATEGORY_ID : 'مفقود ❌');
+// مُعرف فئة الأرشيف الجديدة
+const ARCHIVE_CATEGORY_ID = '1449459496144470056'; 
 
 const client = new Client({
     intents: [
@@ -32,18 +26,21 @@ const client = new Client({
 
 const SERVICE_OPTIONS = {
     'programming_services': {
-        label: 'خدمات برمجية',
-        description: 'تطوير بوتات، مواقع، وسكربتات مخصصة',
+        label: ' طلب خدمات برمجية',
+        description: 'اطلب تطوير بوتات، مواقع، أو سكربتات خاصة.',
+        emoji: '💻',
         categoryName: 'خدمات-برمجية'
     },
     'account_installation': {
-        label: 'تثبيت حسابات ديسكورد',
-        description: 'خدمة تثبيت الحسابات بشكل احترافي',
+        label: ' تثبيت حسابات ديسكورد',
+        description: 'اطلب تثبيت حسابك/حساباتك في ديسكورد.',
+        emoji: '✅',
         categoryName: 'تثبيت-حسابات'
     },
     'general_ticket': { 
-        label: 'استفسار عام',
-        description: 'للاستفسارات والطلبات الأخرى',
+        label: ' تكت عام/استفسار',
+        description: 'للاستفسارات العامة أو الطلبات غير المدرجة.',
+        emoji: '🎫',
         categoryName: 'تكت-عام'
     }
 };
@@ -55,12 +52,13 @@ const SERVICE_OPTIONS = {
 function createComponents() {
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('service_select_menu')
-        .setPlaceholder('اختر نوع الخدمة')
+        .setPlaceholder('اختر نوع الخدمة التي تحتاجها...')
         .addOptions(
             Object.keys(SERVICE_OPTIONS).map(key => ({
                 label: SERVICE_OPTIONS[key].label,
                 description: SERVICE_OPTIONS[key].description,
-                value: key
+                value: key,
+                emoji: SERVICE_OPTIONS[key].emoji
             }))
         );
 
@@ -72,127 +70,86 @@ function createTicketComponents() {
     const closeButton = new ButtonBuilder()
         .setCustomId('close_ticket')
         .setLabel('إغلاق التكت')
-        .setStyle(ButtonStyle.Danger);
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒');
 
     const claimButton = new ButtonBuilder()
         .setCustomId('claim_ticket')
         .setLabel('تولي التكت')
-        .setStyle(ButtonStyle.Success);
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('✋');
 
     return new ActionRowBuilder().addComponents(claimButton, closeButton);
 }
 
-function createApprovalComponents() {
-    const approveButton = new ButtonBuilder()
-        .setCustomId('approve_ticket')
-        .setLabel('قبول')
-        .setStyle(ButtonStyle.Success);
-
-    const rejectButton = new ButtonBuilder()
-        .setCustomId('reject_ticket')
-        .setLabel('رفض')
-        .setStyle(ButtonStyle.Danger);
-
-    return new ActionRowBuilder().addComponents(approveButton, rejectButton);
-}
-
 // ===============================================
-// 3. أحداث البوت
+// 3. أحداث البوت (Commands & Interactions)
 // ===============================================
 
 client.on('ready', () => {
-    console.log('='.repeat(50));
-    console.log('✅ البوت جاهز وشغال بنجاح!');
-    console.log(`📱 اسم البوت: ${client.user.tag}`);
-    console.log(`🆔 معرف البوت: ${client.user.id}`);
-    console.log(`🌐 عدد السيرفرات: ${client.guilds.cache.size}`);
-    console.log('='.repeat(50));
-    
-    client.guilds.cache.forEach(guild => {
-        console.log(`🏠 السيرفر: ${guild.name} (${guild.id})`);
-    });
-    
-    client.user.setActivity(`نظام التكتات | ${PREFIX}setup`, { type: 3 });
+    console.log(`✅ البوت جاهز! تم تسجيل الدخول باسم: ${client.user.tag}`);
+    client.user.setActivity(`فتح التكتات | ${PREFIX}setup`, { type: 3 });
 });
 
-client.on('error', error => {
-    console.error('❌ خطأ في البوت:', error);
-});
-
-client.on('warn', info => {
-    console.warn('⚠️ تحذير:', info);
-});
-
+// التعامل مع أمر البريفكس (-setup)
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    console.log(`📝 أمر جديد: ${commandName} من ${message.author.tag}`);
-
     if (commandName === 'setup') {
         if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            console.log(`❌ ${message.author.tag} ليس لديه صلاحيات`);
-            return message.reply({ content: 'لا تملك صلاحية استخدام هذا الأمر.'});
+            return message.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).'});
         }
 
-        console.log('🔄 جاري تحميل الصورة...');
+        const serviceList = Object.values(SERVICE_OPTIONS).map(opt => `${opt.emoji} **${opt.label}**: ${opt.description}`).join('\n');
         
+        const setupEmbed = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle('🎫 نظام التكتات والخدمات')
+            .setThumbnail(message.guild.iconURL({ dynamic: true }))
+            .setDescription('**مرحباً بك!**\n\nلطلب إحدى خدماتنا، يرجى اختيار نوع الخدمة المطلوبة من القائمة المنسدلة أدناه.\n\nسيتم فتح قناة خاصة لك وللمسؤولين للحديث حول طلبك.')
+            .addFields(
+                { name: '💻 خدماتنا المتاحة:', value: serviceList, inline: false }, 
+                { name: '⚠️ ملاحظة:', value: 'الرجاء توضيح طلبك بتفصيل بمجرد فتح التكت لتسريع عملية التنفيذ.', inline: false }
+            )
+            .setTimestamp()
+            .setFooter({ text: client.user.username, iconURL: client.user.displayAvatarURL() });
+
         try {
-            const response = await axios.get(IMAGE_URL, { responseType: 'arraybuffer' });
-            console.log('✅ تم تحميل الصورة بنجاح');
-            
-            const attachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'banner.png' });
-
-            const setupEmbed = new EmbedBuilder()
-                .setColor('#2b2d31')
-                .setTitle('نظام التكتات')
-                .setDescription('للحصول على خدماتنا، يرجى اختيار نوع الخدمة من القائمة أدناه.\n\nسيتم فتح قناة خاصة للتواصل مع فريق الدعم.')
-                .setImage('attachment://banner.png')
-                .setFooter({ text: 'نظام التكتات الاحترافي' });
-
             await message.channel.send({
                 embeds: [setupEmbed],
-                files: [attachment],
                 components: createComponents()
             });
-            
-            console.log('✅ تم إرسال رسالة Setup بنجاح');
             await message.delete().catch(() => {});
-            
+            await message.channel.send({ content: '✅ تم إرسال رسالة إعداد نظام التكتات بنجاح!' }).then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
         } catch (error) {
-            console.error('❌ فشل في إرسال رسالة الإعداد:', error);
-            await message.reply({ content: 'حدث خطأ أثناء إرسال رسالة الإعداد.' });
+            console.error('فشل في إرسال رسالة الإعداد:', error);
+            await message.reply({ content: '❌ حدث خطأ أثناء إرسال رسالة الإعداد.' });
         }
     }
 });
 
+
+// التعامل مع التفاعلات (القائمة المنسدلة والأزرار) 
 client.on('interactionCreate', async interaction => {
-    console.log(`🔔 تفاعل جديد: ${interaction.customId || interaction.values} من ${interaction.user.tag}`);
-    
     if (interaction.isButton()) {
         if (interaction.customId === 'close_ticket') {
             await handleTicketClose(interaction);
         } else if (interaction.customId === 'claim_ticket') {
             await handleTicketClaim(interaction);
-        } else if (interaction.customId === 'approve_ticket') {
-            await handleTicketApproval(interaction, true);
-        } else if (interaction.customId === 'reject_ticket') {
-            await handleTicketApproval(interaction, false);
         }
     } else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'service_select_menu') {
             const selectedValue = interaction.values[0];
-            console.log(`📋 تم اختيار الخدمة: ${selectedValue}`);
-            await requestTicketApproval(interaction, selectedValue);
+            await openTicket(interaction, selectedValue);
         }
     }
 });
 
-async function requestTicketApproval(interaction, serviceKey) {
+async function openTicket(interaction, serviceKey) {
     await interaction.deferReply({ ephemeral: true });
-    console.log(`🎫 طلب تكت جديد من ${interaction.user.tag}`);
 
     const guild = interaction.guild;
     const member = interaction.member;
@@ -201,223 +158,105 @@ async function requestTicketApproval(interaction, serviceKey) {
         c.name.startsWith(`ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`) && c.topic === member.user.id
     );
     if (existingTicket) {
-        console.log(`⚠️ المستخدم لديه تكت موجود بالفعل`);
-        return interaction.editReply({ content: `لديك بالفعل تكت مفتوح: ${existingTicket}`, ephemeral: true });
+        return interaction.editReply({ content: `❌ لديك بالفعل تكت مفتوح: ${existingTicket}`, ephemeral: true });
     }
 
     const serviceInfo = SERVICE_OPTIONS[serviceKey];
+    const channelName = serviceInfo ? `${serviceInfo.categoryName.toLowerCase()}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}` : `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
     try {
-        const logsChannel = guild.channels.cache.get(LOGS_CHANNEL_ID);
-        if (!logsChannel) {
-            console.error('❌ قناة السجلات غير موجودة:', LOGS_CHANNEL_ID);
-            return interaction.editReply({ content: 'قناة السجلات غير موجودة.', ephemeral: true });
-        }
+        const ticketChannel = await guild.channels.create({
+            name: channelName.substring(0, 100),
+            type: ChannelType.GuildText,
+            topic: member.user.id,
+            permissionOverwrites: [
+                { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: MANAGER_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+            ],
+        });
 
-        console.log(`📤 إرسال طلب موافقة إلى قناة السجلات`);
-
-        const approvalEmbed = new EmbedBuilder()
-            .setColor('#ffa500')
-            .setTitle('طلب فتح تكت جديد')
-            .setDescription(`**المستخدم:** ${member}\n**نوع الخدمة:** ${serviceInfo.label}\n\nيرجى الموافقة أو الرفض على هذا الطلب.`)
+        const ticketEmbed = new EmbedBuilder()
+            .setColor(serviceInfo ? '#00ff00' : '#ffff00')
+            .setTitle(`🎫 تكت جديد: ${serviceInfo ? serviceInfo.label : 'تكت عام'}`)
+            .setDescription(`**مرحباً بك يا ${member}!**\n\nيرجى وصف طلبك بالتفصيل هنا. سيتم التواصل معك من قِبل المسؤولين قريباً.\n\n${serviceInfo ? `**نوع الخدمة المطلوبة:** ${serviceInfo.label}` : ''}`)
             .setTimestamp();
 
-        const approvalMsg = await logsChannel.send({
-            content: `<@&${MANAGER_ROLE_ID}>`,
-            embeds: [approvalEmbed],
-            components: [createApprovalComponents()]
+        await ticketChannel.send({
+            content: `${member} | منشن المسؤولين: <@&${MANAGER_ROLE_ID}>`,
+            embeds: [ticketEmbed],
+            components: [createTicketComponents()]
         });
 
-        client.pendingTickets = client.pendingTickets || new Map();
-        client.pendingTickets.set(approvalMsg.id, {
-            userId: member.user.id,
-            serviceKey: serviceKey,
-            requesterId: interaction.user.id
-        });
-
-        console.log('✅ تم إرسال طلب الموافقة بنجاح');
-        await interaction.editReply({ content: 'تم إرسال طلبك للإدارة، يرجى الانتظار.', ephemeral: true });
+        await interaction.editReply({ content: `✅ تم فتح التكت بنجاح! تفضل بالذهاب إليه: ${ticketChannel}`, ephemeral: true });
 
     } catch (error) {
-        console.error('❌ فشل في إرسال طلب الموافقة:', error);
-        await interaction.editReply({ content: 'حدث خطأ أثناء إرسال الطلب.', ephemeral: true });
+        console.error('فشل في فتح التكت:', error);
+        await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة فتح التكت.', ephemeral: true });
     }
-}
-
-async function handleTicketApproval(interaction, approved) {
-    await interaction.deferUpdate();
-    console.log(`${approved ? '✅ موافقة' : '❌ رفض'} طلب تكت من ${interaction.user.tag}`);
-
-    if (!interaction.member.roles.cache.has(MANAGER_ROLE_ID)) {
-        console.log(`⚠️ المستخدم ليس لديه صلاحيات المدير`);
-        return interaction.followUp({ content: 'لا تملك صلاحية الموافقة على الطلبات.', ephemeral: true });
-    }
-
-    client.pendingTickets = client.pendingTickets || new Map();
-    const ticketData = client.pendingTickets.get(interaction.message.id);
-
-    if (!ticketData) {
-        console.error('❌ بيانات الطلب غير موجودة');
-        return interaction.followUp({ content: 'بيانات الطلب غير موجودة.', ephemeral: true });
-    }
-
-    const guild = interaction.guild;
-    const member = await guild.members.fetch(ticketData.userId).catch(() => null);
-
-    if (!member) {
-        console.log('⚠️ المستخدم لم يعد موجوداً');
-        await interaction.message.edit({ components: [] });
-        client.pendingTickets.delete(interaction.message.id);
-        return interaction.followUp({ content: 'المستخدم لم يعد موجوداً في السيرفر.', ephemeral: true });
-    }
-
-    if (approved) {
-        const serviceInfo = SERVICE_OPTIONS[ticketData.serviceKey];
-        const channelName = `${serviceInfo.categoryName.toLowerCase()}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-
-        console.log(`🏗️ إنشاء قناة تكت: ${channelName}`);
-
-        try {
-            const ticketChannel = await guild.channels.create({
-                name: channelName.substring(0, 100),
-                type: ChannelType.GuildText,
-                topic: member.user.id,
-                permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                    { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-                    { id: MANAGER_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-                ],
-            });
-
-            console.log(`✅ تم إنشاء قناة التكت: ${ticketChannel.name}`);
-
-            const ticketEmbed = new EmbedBuilder()
-                .setColor('#00ff00')
-                .setTitle(`تكت: ${serviceInfo.label}`)
-                .setDescription(`مرحباً ${member}\n\nيرجى كتابة تفاصيل طلبك بوضوح.\nسيتم الرد عليك من قبل فريق الدعم قريباً.`)
-                .setTimestamp();
-
-            await ticketChannel.send({
-                content: `${member} | <@&${MANAGER_ROLE_ID}>`,
-                embeds: [ticketEmbed],
-                components: [createTicketComponents()]
-            });
-
-            const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-                .setColor('#00ff00')
-                .setTitle('تم قبول الطلب')
-                .addFields({ name: 'تمت الموافقة بواسطة', value: interaction.user.tag });
-
-            await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
-
-            const logEmbed = new EmbedBuilder()
-                .setColor('#00ff00')
-                .setTitle('تم فتح تكت جديد')
-                .addFields(
-                    { name: 'المستخدم', value: `${member}`, inline: true },
-                    { name: 'نوع الخدمة', value: serviceInfo.label, inline: true },
-                    { name: 'تمت الموافقة بواسطة', value: interaction.user.tag, inline: true },
-                    { name: 'القناة', value: `${ticketChannel}`, inline: false }
-                )
-                .setTimestamp();
-
-            await interaction.message.channel.send({ embeds: [logEmbed] });
-            console.log('✅ تم فتح التكت بنجاح');
-
-        } catch (error) {
-            console.error('❌ فشل في فتح التكت:', error);
-            await interaction.followUp({ content: 'حدث خطأ أثناء فتح التكت.', ephemeral: true });
-        }
-    } else {
-        const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-            .setColor('#ff0000')
-            .setTitle('تم رفض الطلب')
-            .addFields({ name: 'تم الرفض بواسطة', value: interaction.user.tag });
-
-        await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
-
-        try {
-            await member.send(`تم رفض طلب فتح التكت الخاص بك من قبل الإدارة.`);
-        } catch (error) {
-            console.log('⚠️ تعذر إرسال رسالة خاصة للمستخدم');
-        }
-
-        const logEmbed = new EmbedBuilder()
-            .setColor('#ff0000')
-            .setTitle('تم رفض طلب تكت')
-            .addFields(
-                { name: 'المستخدم', value: `${member}`, inline: true },
-                { name: 'تم الرفض بواسطة', value: interaction.user.tag, inline: true }
-            )
-            .setTimestamp();
-
-        await interaction.message.channel.send({ embeds: [logEmbed] });
-        console.log('✅ تم رفض الطلب');
-    }
-
-    client.pendingTickets.delete(interaction.message.id);
 }
 
 async function handleTicketClose(interaction) {
     await interaction.deferReply({ ephemeral: true });
-    console.log(`🔒 إغلاق تكت بواسطة ${interaction.user.tag}`);
 
     if (!interaction.member.roles.cache.has(MANAGER_ROLE_ID)) {
-        console.log('⚠️ المستخدم ليس لديه صلاحيات الإغلاق');
-        return interaction.editReply({ content: 'لا تملك صلاحية إغلاق التكت.', ephemeral: true });
+        return interaction.editReply({ content: '❌ لا تملك صلاحية إغلاق التكت. هذه الصلاحية للمسؤولين فقط.', ephemeral: true });
     }
 
     const channel = interaction.channel;
     const ticketOwnerId = channel.topic;
 
     if (!ticketOwnerId) {
-        console.log('❌ القناة ليست تكت صالح');
-        return interaction.editReply({ content: 'هذه القناة ليست تكت صالح.', ephemeral: true });
+        return interaction.editReply({ content: '❌ يبدو أن هذه القناة ليست تكت صالح.', ephemeral: true });
     }
 
     try {
-        await channel.send(`تم إغلاق التكت بواسطة ${interaction.user}\nجاري الأرشفة...`);
+        await channel.send(`🔒 **تم إغلاق التكت بواسطة: ${interaction.user}**\nجاري أرشفة القناة ونقلها إلى سجلات السيرفر.`);
         
+        // 1. إزالة صلاحية المشاهدة عن صاحب التكت
+        // (إذا كان صاحب التكت لا يزال في السيرفر)
         await channel.permissionOverwrites.edit(ticketOwnerId, {
             ViewChannel: false
-        }).catch(() => console.log('⚠️ تعذر تعديل صلاحيات صاحب التكت'));
+        }).catch(() => console.log('تعذر تعديل صلاحيات صاحب التكت (قد يكون غادر).'));
 
+        // 2. نقل القناة إلى فئة الأرشيف
         await channel.setParent(ARCHIVE_CATEGORY_ID, { lockPermissions: false });
-        await channel.setName(`closed-${channel.name}`);
         
-        console.log(`✅ تم أرشفة التكت: ${channel.name}`);
+        // 3. تعديل اسم القناة للإشارة إلى أنها مغلقة
+        await channel.setName(`closed-${channel.name}`);
 
+        // 4. إرسال سجل الأرشفة
         const logsChannel = interaction.guild.channels.cache.get(LOGS_CHANNEL_ID);
         if (logsChannel) {
+            const ticketOwner = await interaction.guild.members.fetch(ticketOwnerId).catch(() => 'المستخدم غير موجود');
+
             const logEmbed = new EmbedBuilder()
                 .setColor('#ff0000')
-                .setTitle('تم إغلاق تكت')
+                .setTitle('📄 سجل أرشفة تكت')
                 .addFields(
-                    { name: 'صاحب التكت', value: `<@${ticketOwnerId}>`, inline: true },
+                    { name: 'صاحب التكت', value: `<@${ticketOwnerId}> (${ticketOwnerId})`, inline: true },
                     { name: 'اسم التكت', value: channel.name, inline: true },
-                    { name: 'تم الإغلاق بواسطة', value: interaction.user.tag, inline: true }
+                    { name: 'المغلق/المؤرشف', value: interaction.user.tag, inline: true }
                 )
                 .setTimestamp();
 
             await logsChannel.send({ embeds: [logEmbed] });
         }
         
-        await interaction.editReply({ content: 'تم إغلاق التكت وأرشفته بنجاح.', ephemeral: true });
+        await interaction.editReply({ content: `✅ تم إغلاق التكت وأرشفته بنجاح في <#${ARCHIVE_CATEGORY_ID}>.`, ephemeral: true });
 
     } catch (error) {
-        console.error('❌ فشل في إغلاق التكت:', error);
-        await interaction.editReply({ content: 'حدث خطأ أثناء إغلاق التكت.', ephemeral: true });
+        console.error('فشل في إغلاق وأرشفة التكت:', error);
+        await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة إغلاق وأرشفة التكت. تأكد من صحة مُعرف فئة الأرشيف وصلاحيات البوت.', ephemeral: true });
     }
 }
 
 async function handleTicketClaim(interaction) {
     await interaction.deferReply({ ephemeral: true });
-    console.log(`✋ تولي تكت بواسطة ${interaction.user.tag}`);
 
     if (!interaction.member.roles.cache.has(MANAGER_ROLE_ID)) {
-        console.log('⚠️ المستخدم ليس لديه صلاحيات التولي');
-        return interaction.editReply({ content: 'لا تملك صلاحية تولي التكت.', ephemeral: true });
+        return interaction.editReply({ content: '❌ لا تملك صلاحية تولي التكت. هذه الصلاحية للمسؤولين فقط.', ephemeral: true });
     }
 
     const channel = interaction.channel;
@@ -437,44 +276,34 @@ async function handleTicketClaim(interaction) {
             .setCustomId('close_ticket')
             .setLabel('إغلاق التكت')
             .setStyle(ButtonStyle.Danger)
+            .setEmoji('🔒')
     );
 
     await interaction.message.edit({ components: [newComponents] });
-    await channel.send(`تم تولي هذا التكت بواسطة ${interaction.user}`).then(m => m.pin());
-    await interaction.editReply({ content: 'تم تولي التكت بنجاح.', ephemeral: true });
-    
-    console.log('✅ تم تولي التكت بنجاح');
+
+    await channel.send(`**✋ تم تولي هذا التكت بنجاح بواسطة ${interaction.user}!**\nسيتم التعامل مع طلبك قريباً.`).then(m => m.pin());
+
+    await interaction.editReply({ content: '✅ تم تولي التكت بنجاح. الآن أنت المسؤول الوحيد عن هذا التكت (من جانب الإدارة).', ephemeral: true });
 }
 
 // ===============================================
 // 4. تسجيل الدخول
 // ===============================================
 
-console.log('🔄 جاري تسجيل دخول البوت...');
+client.login(BOT_TOKEN);
 
-client.login(BOT_TOKEN)
-    .then(() => console.log('✅ تم تسجيل الدخول بنجاح'))
-    .catch(error => {
-        console.error('❌ فشل تسجيل الدخول:', error);
-        process.exit(1);
-    });
 
 // ===============================================
-// 5. خادم Express
+// 5. تشغيل خادم وهمي (Mock Server) لـ Render Free Plan
 // ===============================================
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    const status = {
-        bot: client.user ? 'Online ✅' : 'Offline ❌',
-        servers: client.guilds.cache.size,
-        uptime: process.uptime()
-    };
-    res.json(status);
+    res.send('Discord Bot is running and healthy!');
 });
 
 app.listen(port, () => {
-    console.log(`🌐 Express server running on port ${port}`);
+    console.log(`Web Server listening on port ${port}`);
 });
