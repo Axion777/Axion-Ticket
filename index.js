@@ -1,272 +1,161 @@
 // ═══════════════════════════════════════════════════════════════
-// 🤖 النظام العربي المتكامل - النسخة الملكية v15.0
+// 🤖 النظام العربي المتكامل v15.1 - النسخة المستقرة 100%
 // ملك البقز والأخطاء - كنق البرمجة
 // ═══════════════════════════════════════════════════════════════
 
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
 const fs = require('fs-extra');
-const path = require('path');
-const ms = require('ms');
 const http = require('http');
+const ms = require('ms');
 
 // ═══════════════════════════════════════════════════════════════
-// نظام اللوجز الملكي - يعمل حتى لو كل شي فشل
+// نظام اللوجز الاحترافي
 // ═══════════════════════════════════════════════════════════════
 
-const LOG_LEVELS = {
-    FATAL: { color: '\x1b[35m', emoji: '💀', level: 0 },
-    ERROR: { color: '\x1b[31m', emoji: '❌', level: 1 },
-    WARN:  { color: '\x1b[33m', emoji: '⚠️', level: 2 },
-    INFO:  { color: '\x1b[34m', emoji: 'ℹ️', level: 3 },
-    SUCCESS: { color: '\x1b[32m', emoji: '✅', level: 4 },
-    DEBUG: { color: '\x1b[36m', emoji: '🔍', level: 5 },
-    FANCY: { color: '\x1b[35m', emoji: '👑', level: 6 }
+const logger = {
+    logs: [],
+    log: function(level, emoji, msg, data = '') {
+        const time = new Date().toLocaleTimeString('ar-SA');
+        const entry = `[${time}] ${emoji} [${level}] ${msg} ${data ? JSON.stringify(data) : ''}`;
+        console.log(entry);
+        this.logs.push(entry);
+        
+        // حفظ في ملف
+        try {
+            fs.appendFileSync('./bot.log', entry + '\n');
+        } catch(e) {}
+    },
+    fatal: (m, d) => logger.log('FATAL', '💀', m, d),
+    error: (m, d) => logger.log('ERROR', '❌', m, d),
+    warn:  (m, d) => logger.log('WARN', '⚠️', m, d),
+    info:  (m, d) => logger.log('INFO', 'ℹ️', m, d),
+    success: (m, d) => logger.log('SUCCESS', '✅', m, d),
+    debug: (m, d) => logger.log('DEBUG', '🔍', m, d),
+    fancy: (m) => console.log(`\x1b[35m${m}\x1b[0m`)
 };
 
-class RoyalLogger {
-    constructor() {
-        this.logs = [];
-        this.startTime = Date.now();
-        this.initLogFile();
-    }
-
-    initLogFile() {
-        try {
-            fs.ensureDirSync('./logs');
-            this.logFile = `./logs/bot_${new Date().toISOString().split('T')[0]}.log`;
-        } catch (e) {
-            console.error('فشل إنشاء مجلد اللوجز:', e.message);
-        }
-    }
-
-    log(level, message, data = null) {
-        const config = LOG_LEVELS[level] || LOG_LEVELS.INFO;
-        const timestamp = new Date().toLocaleString('ar-SA');
-        const logEntry = {
-            time: timestamp,
-            level: level,
-            message: message,
-            data: data,
-            uptime: Date.now() - this.startTime
-        };
-
-        this.logs.push(logEntry);
-
-        // طباعة ملونة في الكونسول
-        const output = `${config.color}[${config.emoji} ${level}] \x1b[0m \x1b[90m[${timestamp}]\x1b[0m ${message}`;
-        console.log(output);
-
-        // حفظ في الملف
-        try {
-            const fileOutput = `[${timestamp}] [${level}] ${message}${data ? ' | DATA: ' + JSON.stringify(data) : ''}\n`;
-            fs.appendFileSync(this.logFile, fileOutput);
-        } catch (e) {
-            // نتجاهل أخطاء الكتابة في الملف
-        }
-
-        return logEntry;
-    }
-
-    fatal(msg, data) { return this.log('FATAL', msg, data); }
-    error(msg, data) { return this.log('ERROR', msg, data); }
-    warn(msg, data)  { return this.log('WARN', msg, data); }
-    info(msg, data)  { return this.log('INFO', msg, data); }
-    success(msg, data) { return this.log('SUCCESS', msg, data); }
-    debug(msg, data) { return this.log('DEBUG', msg, data); }
-    fancy(msg, data) { return this.log('FANCY', msg, data); }
-
-    getDiagnostics() {
-        return {
-            totalLogs: this.logs.length,
-            errors: this.logs.filter(l => l.level === 'ERROR' || l.level === 'FATAL').length,
-            warnings: this.logs.filter(l => l.level === 'WARN').length,
-            uptime: Date.now() - this.startTime,
-            last10Logs: this.logs.slice(-10)
-        };
-    }
-}
-
-const logger = new RoyalLogger();
-
-// ═══════════════════════════════════════════════════════════════
-// نظام الأمان - التحقق من المتغيرات قبل ما يفشل أي شي
-// ═══════════════════════════════════════════════════════════════
-
 logger.fancy('═══════════════════════════════════════════════════');
-logger.fancy('🤖 النظام العربي المتكامل - النسخة الملكية v15.0');
-logger.fancy('👑 ملك البقز والأخطاء');
+logger.fancy('👑 النظام العربي المتكامل v15.1 - النسخة المستقرة');
 logger.fancy('═══════════════════════════════════════════════════');
 
-// التحقق من Node.js version
-const nodeVersion = process.version;
-logger.info(`Node.js version: ${nodeVersion}`);
+// ═══════════════════════════════════════════════════════════════
+// التحقق من المتغيرات البيئية
+// ═══════════════════════════════════════════════════════════════
 
-if (parseInt(nodeVersion.slice(1)) < 18) {
-    logger.fatal('Node.js يجب أن يكون 18 أو أعلى!');
+const TOKEN = process.env.TOKEN;
+const OWNER_ID = process.env.OWNER_ID;
+const PORT = process.env.PORT || 3000;
+
+logger.info('بدء التشغيل...');
+logger.info(`Node.js: ${process.version}`);
+logger.info(`المنفذ: ${PORT}`);
+
+if (!TOKEN) {
+    logger.fatal('TOKEN غير موجود!');
     process.exit(1);
 }
 
-// التحقق من التوكن
-const TOKEN = process.env.TOKEN;
-const OWNER_ID = process.env.OWNER_ID;
-
-logger.info('التحقق من المتغيرات البيئية...');
-
-if (!TOKEN) {
-    logger.fatal('TOKEN غير موجود! تأكد من إضافته في Environment Variables');
-    logger.info('رابط المساعدة: https://render.com/docs/environment-variables');
-    
-    // نشتغل بـ Keep Alive بس عشان ما يطفي السيرفر
-    startKeepAliveOnly();
-} else {
-    logger.success('TOKEN موجود ✅');
-    logger.debug(`TOKEN length: ${TOKEN.length}`);
-    logger.debug(`TOKEN starts with: ${TOKEN.substring(0, 10)}...`);
-    
-    if (TOKEN.length < 50) {
-        logger.warn('TOKEN يبدو قصير! تأكد أنه كامل');
-    }
+if (TOKEN.length < 50) {
+    logger.warn('TOKEN يبدو قصير!');
 }
 
-if (!OWNER_ID) {
-    logger.warn('OWNER_ID غير موجود! بعض الأوامر لن تعمل');
-} else {
-    logger.success(`OWNER_ID: ${OWNER_ID} ✅`);
-}
+logger.success('TOKEN موجود ✅');
+logger.info(`OWNER_ID: ${OWNER_ID || 'غير محدد'}`);
 
 // ═══════════════════════════════════════════════════════════════
-// نظام قاعدة البيانات - يعمل حتى لو SQLite فشل
+// نظام قاعدة البيانات
 // ═══════════════════════════════════════════════════════════════
 
-class SafeDatabase {
+class Database {
     constructor() {
         this.data = {};
-        this.memoryMode = false;
-        this.init();
-    }
-
-    init() {
+        this.file = './data/db.json';
         try {
-            // نحاول نسوي JSON file
-            this.filePath = './data/database.json';
             fs.ensureDirSync('./data');
-            
-            if (fs.existsSync(this.filePath)) {
-                this.data = fs.readJsonSync(this.filePath);
-                logger.success('قاعدة البيانات JSON محملة ✅');
-            } else {
-                this.save();
-                logger.success('قاعدة بيانات جديدة تم إنشاؤها ✅');
+            if (fs.existsSync(this.file)) {
+                this.data = fs.readJsonSync(this.file);
             }
-        } catch (error) {
-            logger.error('فشل تحميل قاعدة البيانات، الانتقال لوضع الذاكرة', error.message);
-            this.memoryMode = true;
-            this.data = {};
+        } catch(e) {
+            logger.error('فشل تحميل DB', e.message);
         }
     }
-
-    save() {
-        if (this.memoryMode) return;
-        try {
-            fs.writeJsonSync(this.filePath, this.data, { spaces: 2 });
-        } catch (error) {
-            logger.error('فشل حفظ البيانات', error.message);
-        }
-    }
-
-    get(key) {
-        return this.data[key] ?? null;
-    }
-
-    set(key, value) {
-        this.data[key] = value;
-        this.save();
-        return value;
-    }
-
-    add(key, amount) {
-        const current = this.get(key) || 0;
-        return this.set(key, current + amount);
-    }
-
-    subtract(key, amount) {
-        return this.add(key, -amount);
-    }
-}
-
-const db = new SafeDatabase();
-
-// ═══════════════════════════════════════════════════════════════
-// Keep Alive Server - يشتغل دائماً حتى لو البوت فشل
-// ═══════════════════════════════════════════════════════════════
-
-function startKeepAliveOnly() {
-    const server = http.createServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`
-            <h1>🤖 البوت في وضع الطوارئ</h1>
-            <p>التوكن غير موجود! أضف TOKEN في Environment Variables</p>
-            <p>الوقت: ${new Date().toLocaleString('ar-SA')}</p>
-        `);
-    });
-
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-        logger.success(`Keep Alive يعمل على المنفذ ${PORT} (وضع الطوارئ)`);
-    });
-}
-
-const keepAliveServer = http.createServer((req, res) => {
-    const diagnostics = logger.getDiagnostics();
     
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({
-        status: client.readyAt ? 'online' : 'connecting',
-        bot: client.user ? {
-            tag: client.user.tag,
-            id: client.user.id,
-            guilds: client.guilds.cache.size,
-            users: client.users.cache.size
-        } : null,
-        uptime: Date.now() - logger.startTime,
-        diagnostics: diagnostics,
-        timestamp: new Date().toISOString()
-    }, null, 2));
+    save() {
+        try {
+            fs.writeJsonSync(this.file, this.data);
+        } catch(e) {}
+    }
+    
+    get(k) { return this.data[k] ?? null; }
+    set(k, v) { this.data[k] = v; this.save(); return v; }
+    add(k, n) { return this.set(k, (this.get(k) || 0) + n); }
+}
+
+const db = new Database();
+logger.success('قاعدة البيانات جاهزة ✅');
+
+// ═══════════════════════════════════════════════════════════════
+// Keep Alive Server - يستخدم PORT الصحيح
+// ═══════════════════════════════════════════════════════════════
+
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+            <title>🤖 البوت العربي</title>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: Arial; background: #36393f; color: white; padding: 40px; }
+                .status { padding: 20px; border-radius: 10px; margin: 20px 0; }
+                .online { background: #3ba55d; }
+                .offline { background: #ed4245; }
+                .info { background: #5865f2; }
+            </style>
+        </head>
+        <body>
+            <h1>🤖 النظام العربي المتكامل</h1>
+            <div class="status ${client?.readyAt ? 'online' : 'offline'}">
+                <h2>${client?.readyAt ? '🟢 البوت يعمل' : '🟡 جاري الاتصال...'}</h2>
+                <p>${client?.user?.tag || 'غير متصل'}</p>
+            </div>
+            <div class="info">
+                <p>📊 السيرفرات: ${client?.guilds?.cache?.size || 0}</p>
+                <p>👥 المستخدمين: ${client?.users?.cache?.size || 0}</p>
+                <p>⏱️ مدة التشغيل: ${Math.floor((Date.now() - startTime) / 1000)} ثانية</p>
+            </div>
+            <hr>
+            <p>🕐 آخر تحديث: ${new Date().toLocaleString('ar-SA')}</p>
+        </body>
+        </html>
+    `);
+});
+
+const startTime = Date.now();
+
+server.listen(PORT, () => {
+    logger.success(`🌐 Keep Alive Server يعمل على المنفذ ${PORT}`);
 });
 
 // ═══════════════════════════════════════════════════════════════
-// تهيئة البوت - مع معالجة أخطاء شاملة
+// تهيئة البوت
 // ═══════════════════════════════════════════════════════════════
 
-let client;
-
-try {
-    client = new Client({
-        intents: [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent,
-            GatewayIntentBits.GuildMembers,
-            GatewayIntentBits.GuildVoiceStates,
-            GatewayIntentBits.GuildMessageReactions,
-            GatewayIntentBits.DirectMessages,
-            GatewayIntentBits.GuildPresences
-        ],
-        partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember, Partials.Reaction],
-        failIfNotExists: false,
-        allowedMentions: { parse: ['users', 'roles'], repliedUser: true },
-        presence: {
-            status: 'online',
-            activities: [{ name: 'جاري التشغيل...', type: 0 }]
-        }
-    });
-
-    logger.success('Client تم إنشاؤه بنجاح ✅');
-} catch (error) {
-    logger.fatal('فشل إنشاء Client!', error.message);
-    startKeepAliveOnly();
-    return;
-}
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildPresences
+    ],
+    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember, Partials.Reaction],
+    failIfNotExists: false,
+    allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
+});
 
 // ═══════════════════════════════════════════════════════════════
 // الإعدادات
@@ -280,257 +169,394 @@ const config = {
         success: 0x57F287,
         danger: 0xED4245,
         warning: 0xFEE75C,
-        info: 0xEB459E,
-        gold: 0xFFD700
+        info: 0xEB459E
     }
 };
 
 // ═══════════════════════════════════════════════════════════════
-// دوال مساعدة آمنة
+// دوال مساعدة
 // ═══════════════════════════════════════════════════════════════
 
-function safeCreateEmbed(title, description, color = 'primary') {
+function createEmbed(title, desc, color = 'primary') {
     try {
         return new EmbedBuilder()
             .setColor(config.color[color] || config.color.primary)
             .setTitle(title?.substring(0, 256) || 'بدون عنوان')
-            .setDescription(description?.substring(0, 4096) || 'بدون وصف')
+            .setDescription(desc?.substring(0, 4096) || '')
             .setTimestamp()
             .setFooter({ 
-                text: `النظام العربي | ${new Date().toLocaleDateString('ar-SA')}`, 
+                text: `النظام العربي | ${new Date().toLocaleDateString('ar-SA')}`,
                 iconURL: client.user?.displayAvatarURL() || undefined
             });
-    } catch (error) {
-        logger.error('خطأ في إنشاء Embed', error.message);
-        return new EmbedBuilder().setDescription('⚠️ خطأ في العرض').setColor(config.color.danger);
+    } catch(e) {
+        return new EmbedBuilder().setDescription('⚠️ خطأ').setColor(config.color.danger);
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// نظام الأوامر المُحسّن
+// الأوامر
 // ═══════════════════════════════════════════════════════════════
 
 const commands = {
     help: {
         name: 'مساعدة',
-        aliases: ['help', 'h', 'commands'],
-        description: 'عرض قائمة الأوامر',
+        aliases: ['help', 'h', 'commands', 'اوامر'],
         category: 'عام',
-        cooldown: 3,
-        execute: async (message, args) => {
-            logger.info(`أمر مساعدة من ${message.author.tag}`);
-            
-            const embed = safeCreateEmbed(
+        execute: async (msg, args) => {
+            const embed = createEmbed(
                 '🤖 قائمة الأوامر',
-                '**الأوامر المتاحة:**\n\n⭐ **عام:** `-مساعدة` `-بينغ` `-معلومات`\n🛡️ **إدارة:** `-حظر` `-طرد` `-مسح`\n💰 **اقتصاد:** `-يومية` `-رصيد`',
+                '**الأوامر المتاحة:**\n\n' +
+                '⭐ **عام:** `-مساعدة` `-بينغ` `-معلومات` `-سيرفر`\n' +
+                '🛡️ **إدارة:** `-حظر` `-طرد` `-اسكات` `-مسح` `-قفل`\n' +
+                '💰 **اقتصاد:** `-يومية` `-رصيد` `-ايداع` `-سحب`\n' +
+                '🎮 **ترفيه:** `-قل` `-حجرة` `-تصويت`',
                 'primary'
             );
-            
-            await message.reply({ embeds: [embed] });
+            await msg.reply({ embeds: [embed] });
         }
     },
 
     ping: {
         name: 'بينغ',
-        aliases: ['ping', 'pong'],
-        description: 'اختبار سرعة البوت',
+        aliases: ['ping', 'pong', 'سرعة'],
         category: 'عام',
-        cooldown: 5,
-        execute: async (message) => {
-            const sent = await message.reply({ embeds: [safeCreateEmbed('⏳ جاري القياس...', 'انتظر', 'warning')] });
-            const latency = sent.createdTimestamp - message.createdTimestamp;
+        execute: async (msg) => {
+            const sent = await msg.reply({ embeds: [createEmbed('⏳ جاري القياس...', 'انتظر', 'warning')] });
+            const latency = sent.createdTimestamp - msg.createdTimestamp;
             
-            const embed = safeCreateEmbed(
-                '🏓 بينغ!',
-                `**البوت:** ${latency}ms\n**API:** ${Math.round(client.ws.ping)}ms`,
-                latency < 100 ? 'success' : 'warning'
-            );
-            
-            await sent.edit({ embeds: [embed] });
+            await sent.edit({ 
+                embeds: [createEmbed(
+                    '🏓 بينغ!',
+                    `**البوت:** ${latency}ms\n**API:** ${Math.round(client.ws.ping)}ms`,
+                    latency < 100 ? 'success' : 'warning'
+                )]
+            });
         }
     },
 
-    // أمر التقييم (للمالك فقط)
+    userinfo: {
+        name: 'معلومات',
+        aliases: ['userinfo', 'user', 'عني', 'عضو'],
+        category: 'عام',
+        execute: async (msg) => {
+            const target = msg.mentions.members.first() || msg.member;
+            const embed = createEmbed(
+                `👤 ${target.user.username}`,
+                `**الآيدي:** \`${target.id}\`\n**تاريخ الانضمام:** <t:${Math.floor(target.joinedTimestamp / 1000)}:R>\n**الرتب:** ${target.roles.cache.size - 1}`,
+                'info',
+                target.user.displayAvatarURL()
+            );
+            await msg.reply({ embeds: [embed] });
+        }
+    },
+
+    serverinfo: {
+        name: 'سيرفر',
+        aliases: ['serverinfo', 'server', 'السيرفر'],
+        category: 'عام',
+        execute: async (msg) => {
+            const g = msg.guild;
+            const embed = createEmbed(
+                `📢 ${g.name}`,
+                `**الأعضاء:** ${g.memberCount}\n**القنوات:** ${g.channels.cache.size}\n**التاريخ:** <t:${Math.floor(g.createdTimestamp / 1000)}:R>`,
+                'info',
+                g.iconURL()
+            );
+            await msg.reply({ embeds: [embed] });
+        }
+    },
+
+    // إدارة
+    ban: {
+        name: 'حظر',
+        aliases: ['ban', 'تبنيد', 'بان'],
+        category: 'إدارة',
+        permissions: ['BanMembers'],
+        execute: async (msg, args) => {
+            const target = msg.mentions.members.first();
+            if (!target) return msg.reply({ embeds: [createEmbed('❌ خطأ', 'منشن العضو', 'danger')] });
+            
+            const reason = args.slice(1).join(' ') || 'غير محدد';
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`ban_${target.id}`).setLabel('تأكيد').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`cancel_${target.id}`).setLabel('إلغاء').setStyle(ButtonStyle.Secondary)
+            );
+            
+            const m = await msg.reply({ 
+                embeds: [createEmbed('⚠️ تأكيد الحظر', `حظر ${target}؟\nالسبب: ${reason}`, 'warning')],
+                components: [row]
+            });
+            
+            db.set(`temp_${m.id}`, { action: 'ban', target: target.id, reason, mod: msg.author.id });
+        }
+    },
+
+    kick: {
+        name: 'طرد',
+        aliases: ['kick', 'كيك', 'اطرد'],
+        category: 'إدارة',
+        permissions: ['KickMembers'],
+        execute: async (msg, args) => {
+            const target = msg.mentions.members.first();
+            if (!target) return msg.reply({ embeds: [createEmbed('❌ خطأ', 'منشن العضو', 'danger')] });
+            
+            await target.kick(args.slice(1).join(' ') || 'غير محدد');
+            await msg.reply({ embeds: [createEmbed('👢 تم الطرد', `${target.user.tag} تم طرده`, 'success')] });
+        }
+    },
+
+    clear: {
+        name: 'مسح',
+        aliases: ['clear', 'purge', 'امسح', 'تنظيف'],
+        category: 'إدارة',
+        permissions: ['ManageMessages'],
+        execute: async (msg, args) => {
+            const amount = parseInt(args[0]);
+            if (!amount || amount < 1 || amount > 100) {
+                return msg.reply({ embeds: [createEmbed('❌ خطأ', 'رقم من 1-100', 'danger')] });
+            }
+            
+            const deleted = await msg.channel.bulkDelete(amount + 1, true);
+            const m = await msg.channel.send({ embeds: [createEmbed('🧹 تم المسح', `تم مسح ${deleted.size - 1} رسالة`, 'success')] });
+            setTimeout(() => m.delete().catch(() => {}), 3000);
+        }
+    },
+
+    lock: {
+        name: 'قفل',
+        aliases: ['lock', 'اقفل'],
+        category: 'إدارة',
+        permissions: ['ManageChannels'],
+        execute: async (msg) => {
+            await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: false });
+            await msg.reply({ embeds: [createEmbed('🔒 تم القفل', 'تم قفل القناة', 'danger')] });
+        }
+    },
+
+    unlock: {
+        name: 'فتح',
+        aliases: ['unlock', 'افتح'],
+        category: 'إدارة',
+        permissions: ['ManageChannels'],
+        execute: async (msg) => {
+            await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: true });
+            await msg.reply({ embeds: [createEmbed('🔓 تم الفتح', 'تم فتح القناة', 'success')] });
+        }
+    },
+
+    // اقتصاد
+    daily: {
+        name: 'يومية',
+        aliases: ['daily', 'هدية', 'هديه'],
+        category: 'اقتصاد',
+        execute: async (msg) => {
+            const last = db.get(`daily_${msg.author.id}`);
+            const now = Date.now();
+            
+            if (last && now - last < 86400000) {
+                const remaining = 86400000 - (now - last);
+                const hours = Math.floor(remaining / 3600000);
+                return msg.reply({ embeds: [createEmbed('⏳ انتظر', `بعد ${hours} ساعة`, 'warning')] });
+            }
+            
+            const amount = Math.floor(Math.random() * 1000) + 500;
+            db.add(`money_${msg.author.id}`, amount);
+            db.set(`daily_${msg.author.id}`, now);
+            
+            await msg.reply({ 
+                embeds: [createEmbed('🎁 مكافأة يومية', `حصلت على ${amount} عملة! رصيدك: ${db.get(`money_${msg.author.id}`)}`, 'success')] 
+            });
+        }
+    },
+
+    balance: {
+        name: 'رصيد',
+        aliases: ['balance', 'bal', 'فلوس', 'كاش'],
+        category: 'اقتصاد',
+        execute: async (msg) => {
+            const target = msg.mentions.users.first() || msg.author;
+            const bal = db.get(`money_${target.id}`) || 0;
+            const bank = db.get(`bank_${target.id}`) || 0;
+            
+            await msg.reply({ 
+                embeds: [createEmbed('💰 الرصيد', `**${target.username}**\n💵 نقدي: ${bal}\n🏦 بنك: ${bank}\n💎 الكلي: ${bal + bank}`, 'info', target.displayAvatarURL())] 
+            });
+        }
+    },
+
+    // ترفيه
+    say: {
+        name: 'قل',
+        aliases: ['say', 'echo', 'اكتب'],
+        category: 'ترفيه',
+        execute: async (msg, args) => {
+            const text = args.join(' ');
+            if (!text) return;
+            await msg.delete().catch(() => {});
+            await msg.channel.send(text);
+        }
+    },
+
+    rps: {
+        name: 'حجرة',
+        aliases: ['rps', 'حجرة-ورقة-مقص'],
+        category: 'ترفيه',
+        execute: async (msg, args) => {
+            const choices = ['حجرة', 'ورقة', 'مقص'];
+            const userChoice = args[0];
+            
+            if (!choices.includes(userChoice)) {
+                return msg.reply({ embeds: [createEmbed('❌ خطأ', 'اختر: حجرة، ورقة، أو مقص', 'danger')] });
+            }
+            
+            const botChoice = choices[Math.floor(Math.random() * choices.length)];
+            let result = 'تعادل! 🤝';
+            let color = 'warning';
+            
+            if (
+                (userChoice === 'حجرة' && botChoice === 'مقص') ||
+                (userChoice === 'ورقة' && botChoice === 'حجرة') ||
+                (userChoice === 'مقص' && botChoice === 'ورقة')
+            ) {
+                result = 'فزت! 🎉';
+                color = 'success';
+            } else if (userChoice !== botChoice) {
+                result = 'خسرت! 😢';
+                color = 'danger';
+            }
+            
+            await msg.reply({ 
+                embeds: [createEmbed('🎮 حجرة ورقة مقص', `أنت: ${userChoice}\nأنا: ${botChoice}\n\n${result}`, color)] 
+            });
+        }
+    },
+
+    // مالك
     eval: {
         name: 'تقييم',
-        aliases: ['eval', 'e'],
-        description: 'تنفيذ كود (للمالك فقط)',
+        aliases: ['eval', 'e', 'كود'],
         category: 'مالك',
-        execute: async (message, args) => {
-            if (message.author.id !== config.ownerID) {
-                return message.reply({ embeds: [safeCreateEmbed('❌ ممنوع', 'للمالك فقط!', 'danger')] });
+        execute: async (msg, args) => {
+            if (msg.author.id !== config.ownerID) {
+                return msg.reply({ embeds: [createEmbed('❌ ممنوع', 'للمالك فقط!', 'danger')] });
             }
             
-            const code = args.join(' ');
             try {
-                let result = eval(code);
+                let result = eval(args.join(' '));
                 if (typeof result !== 'string') result = require('util').inspect(result, { depth: 0 });
-                
-                await message.reply({ 
-                    embeds: [safeCreateEmbed('✅ نتيجة', `\`\`\`js\n${result.slice(0, 4000)}\n\`\`\``, 'success')] 
-                });
-            } catch (error) {
-                await message.reply({ 
-                    embeds: [safeCreateEmbed('❌ خطأ', error.message, 'danger')] 
-                });
+                await msg.reply({ embeds: [createEmbed('✅ نتيجة', `\`\`\`js\n${result.slice(0, 4000)}\n\`\`\``, 'success')] });
+            } catch (err) {
+                await msg.reply({ embeds: [createEmbed('❌ خطأ', err.message, 'danger')] });
             }
         }
     },
 
-    // أمر تشخيص النظام
-    diagnostics: {
-        name: 'تشخيص',
-        aliases: ['diag', 'status', 'system'],
-        description: 'عرض حالة النظام',
+    restart: {
+        name: 'اعادة',
+        aliases: ['restart', 'ريستارت', 'تحديث'],
         category: 'مالك',
-        execute: async (message) => {
-            if (message.author.id !== config.ownerID) return;
-            
-            const diag = logger.getDiagnostics();
-            const embed = safeCreateEmbed(
-                '🔍 تشخيص النظام',
-                `**الأخطاء:** ${diag.errors}\n**التحذيرات:** ${diag.warnings}\n**إجمالي اللوجز:** ${diag.totalLogs}\n**المدة:** ${(diag.uptime / 1000).toFixed(1)}s\n**الذاكرة:** ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`,
-                'info'
-            );
-            
-            await message.reply({ embeds: [embed] });
+        execute: async (msg) => {
+            if (msg.author.id !== config.ownerID) return;
+            await msg.reply({ embeds: [createEmbed('🔄 إعادة تشغيل', 'جاري...', 'warning')] });
+            process.exit(0);
         }
     }
 };
 
 // ═══════════════════════════════════════════════════════════════
-// معالجة الأحداث - مع Try-Catch في كل مكان
+// الأحداث
 // ═══════════════════════════════════════════════════════════════
 
 client.once('ready', () => {
-    try {
-        logger.fancy('═══════════════════════════════════════════════════');
-        logger.success(`✅ البوت ${client.user.tag} متصل بنجاح!`);
-        logger.info(`📊 السيرفرات: ${client.guilds.cache.size}`);
-        logger.info(`👥 المستخدمين: ${client.users.cache.size}`);
-        logger.info(`⌨️ الأوامر: ${Object.keys(commands).length}`);
-        logger.fancy('═══════════════════════════════════════════════════');
-
-        // تحديث الحالة
-        client.user.setActivity('-مساعدة | النظام العربي', { type: 0 });
-    } catch (error) {
-        logger.error('خطأ في حدث ready', error.message);
-    }
+    logger.fancy('═══════════════════════════════════════════════════');
+    logger.success(`البوت ${client.user.tag} متصل!`);
+    logger.info(`السيرفرات: ${client.guilds.cache.size}`);
+    logger.info(`المستخدمين: ${client.users.cache.size}`);
+    logger.fancy('═══════════════════════════════════════════════════');
+    
+    client.user.setActivity('-مساعدة | النظام العربي', { type: 0 });
 });
 
-client.on('messageCreate', async (message) => {
+client.on('messageCreate', async (msg) => {
     try {
-        if (message.author.bot || !message.guild) return;
+        if (msg.author.bot || !msg.guild) return;
+        if (!msg.content.startsWith(config.prefix)) return;
         
-        const prefix = config.prefix;
-        if (!message.content.startsWith(prefix)) return;
+        const args = msg.content.slice(config.prefix.length).trim().split(/ +/);
+        const cmdName = args.shift().toLowerCase();
         
-        const args = message.content.slice(prefix.length).trim().split(/ +/);
-        const commandName = args.shift().toLowerCase();
+        const cmd = Object.values(commands).find(c => c.name === cmdName || c.aliases.includes(cmdName));
+        if (!cmd) return;
         
-        const command = Object.values(commands).find(cmd => 
-            cmd.name === commandName || cmd.aliases.includes(commandName)
-        );
-        
-        if (!command) return;
-        
-        logger.info(`تنفيذ: ${command.name} بواسطة ${message.author.tag}`);
-        
-        await command.execute(message, args);
-        
-    } catch (error) {
-        logger.error('خطأ في معالجة الرسالة', error.message);
-        try {
-            await message.reply({ 
-                embeds: [safeCreateEmbed('❌ خطأ', 'حدث خطأ غير متوقع!', 'danger')] 
-            });
-        } catch (e) {
-            // نتجاهل
+        // صلاحيات
+        if (cmd.permissions) {
+            const missing = cmd.permissions.filter(p => !msg.member.permissions.has(PermissionsBitField.Flags[p]));
+            if (missing.length > 0) {
+                return msg.reply({ embeds: [createEmbed('🛡️ صلاحيات', `تحتاج: ${missing.join(', ')}`, 'danger')] });
+            }
         }
+        
+        logger.info(`أمر: ${cmd.name} من ${msg.author.tag}`);
+        await cmd.execute(msg, args);
+        
+    } catch (err) {
+        logger.error('خطأ في أمر', err.message);
     }
 });
 
 client.on('interactionCreate', async (interaction) => {
     try {
         if (!interaction.isButton()) return;
-        await interaction.reply({ content: '✅ تم!', ephemeral: true });
-    } catch (error) {
-        logger.error('خطأ في Interaction', error.message);
+        
+        const data = db.get(`temp_${interaction.message.id}`);
+        if (!data) return;
+        
+        if (interaction.customId.startsWith('ban_')) {
+            if (interaction.user.id !== data.mod) {
+                return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
+            }
+            
+            const member = await interaction.guild.members.fetch(data.target);
+            await member.ban({ reason: data.reason });
+            await interaction.update({ 
+                embeds: [createEmbed('🔨 تم الحظر', `${member.user.tag} تم حظره`, 'success')],
+                components: []
+            });
+            db.set(`temp_${interaction.message.id}`, null);
+        }
+        
+        if (interaction.customId.startsWith('cancel_')) {
+            await interaction.update({ 
+                embeds: [createEmbed('❌ تم الإلغاء', 'تم إلغاء العملية', 'secondary')],
+                components: []
+            });
+            db.set(`temp_${interaction.message.id}`, null);
+        }
+        
+    } catch (err) {
+        logger.error('خطأ في interaction', err.message);
     }
 });
 
-// معالجة الأخطاء العامة
-client.on('error', (error) => {
-    logger.error('Discord Client Error', error.message);
-});
-
-client.on('warn', (warning) => {
-    logger.warn('Discord Warning', warning);
-});
-
-client.on('disconnect', () => {
-    logger.warn('البوت انفصل! جاري المحاولة لل reconnect...');
-});
-
-client.on('reconnecting', () => {
-    logger.info('جاري إعادة الاتصال...');
-});
-
-// أخطاء العملية
-process.on('unhandledRejection', (error) => {
-    logger.error('Unhandled Rejection', error.message);
-});
-
-process.on('uncaughtException', (error) => {
-    logger.fatal('Uncaught Exception', error.message);
-    // ما نطفي البوت، نحاول نكمل
-});
+// أخطاء
+client.on('error', (err) => logger.error('Discord Error', err.message));
+process.on('unhandledRejection', (err) => logger.error('Unhandled Rejection', err.message));
+process.on('uncaughtException', (err) => logger.fatal('Uncaught Exception', err.message));
 
 // ═══════════════════════════════════════════════════════════════
-// تشغيل Keep Alive Server
+// تسجيل الدخول
 // ═══════════════════════════════════════════════════════════════
 
-const PORT = process.env.PORT || 3000;
-keepAliveServer.listen(PORT, () => {
-    logger.success(`🌐 Keep Alive Server يعمل على http://localhost:${PORT}`);
-    logger.info(`📡 رابط التشخيص: https://your-service.onrender.com`);
-});
+logger.info('🔄 جاري الاتصال...');
 
-// ═══════════════════════════════════════════════════════════════
-// تسجيل الدخول - مع معالجة أخطاء مفصلة
-// ═══════════════════════════════════════════════════════════════
-
-if (!TOKEN) {
-    logger.fatal('لا يوجد TOKEN! البوت لن يشتغل.');
-    logger.info('💡 الحل: أضف TOKEN في Environment Variables في Render');
-} else {
-    logger.info('🔄 جاري تسجيل الدخول...');
+client.login(TOKEN).then(() => {
+    logger.success('✅ تم تسجيل الدخول!');
+}).catch((err) => {
+    logger.fatal('❌ فشل الدخول!', err.message);
     
-    client.login(TOKEN).then(() => {
-        logger.success('✅ تم تسجيل الدخول بنجاح!');
-    }).catch((error) => {
-        logger.fatal('❌ فشل تسجيل الدخول!', error.message);
-        
-        if (error.message.includes('token')) {
-            logger.error('🔴 التوكن غلط أو منتهي!');
-            logger.info('💡 الحل: سوي Reset Token في Discord Developer Portal');
-        } else if (error.message.includes('intents')) {
-            logger.error('🔴 الـ Intents مو مفعلة!');
-            logger.info('💡 الحل: فعل الـ 3 Intents في Discord Developer Portal');
-        } else if (error.message.includes('disallowed')) {
-            logger.error('🔴 البوت محظور أو معطل!');
-        }
-        
-        // نستمر في Keep Alive حتى لو فشل الدخول
-        logger.info('🟡 Keep Alive Server مستمر في العمل...');
-    });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// نظام المراقبة الذاتية
-// ═══════════════════════════════════════════════════════════════
-
-setInterval(() => {
-    const diag = logger.getDiagnostics();
-    logger.debug(`مراقبة: ${diag.errors} أخطاء, ${diag.warnings} تحذيرات, ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`);
-}, 60000); // كل دقيقة
+    if (err.message.includes('token')) {
+        logger.error('🔴 التوكن غلط!');
+    } else if (err.message.includes('intents')) {
+        logger.error('🔴 فعل الـ 3 Intents في Discord Developer Portal');
+    }
+});
