@@ -1,7 +1,6 @@
 {
   "name": "arabic-bot-royal",
   "version": "15.1.0",
-  "description": "النظام العربي المتكامل - النسخة الملكية المستقرة",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
