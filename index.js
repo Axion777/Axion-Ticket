@@ -1,142 +1,74 @@
 // ═══════════════════════════════════════════════════════════════
-// 🤖 النظام العربي المتكامل v15.1 - النسخة المستقرة 100%
-// ملك البقز والأخطاء - كنق البرمجة
+// 🤖 النظام العربي المتكامل v15.2 - النسخة المضمونة 100%
 // ═══════════════════════════════════════════════════════════════
 
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
 const fs = require('fs-extra');
 const http = require('http');
-const ms = require('ms');
 
 // ═══════════════════════════════════════════════════════════════
-// نظام اللوجز الاحترافي
+// اللوج البسيط والفعال
 // ═══════════════════════════════════════════════════════════════
 
-const logger = {
-    logs: [],
-    log: function(level, emoji, msg, data = '') {
-        const time = new Date().toLocaleTimeString('ar-SA');
-        const entry = `[${time}] ${emoji} [${level}] ${msg} ${data ? JSON.stringify(data) : ''}`;
-        console.log(entry);
-        this.logs.push(entry);
-        
-        // حفظ في ملف
-        try {
-            fs.appendFileSync('./bot.log', entry + '\n');
-        } catch(e) {}
-    },
-    fatal: (m, d) => logger.log('FATAL', '💀', m, d),
-    error: (m, d) => logger.log('ERROR', '❌', m, d),
-    warn:  (m, d) => logger.log('WARN', '⚠️', m, d),
-    info:  (m, d) => logger.log('INFO', 'ℹ️', m, d),
-    success: (m, d) => logger.log('SUCCESS', '✅', m, d),
-    debug: (m, d) => logger.log('DEBUG', '🔍', m, d),
-    fancy: (m) => console.log(`\x1b[35m${m}\x1b[0m`)
+const log = (emoji, msg) => {
+    const time = new Date().toLocaleTimeString('ar-SA');
+    console.log(`[${time}] ${emoji} ${msg}`);
 };
 
-logger.fancy('═══════════════════════════════════════════════════');
-logger.fancy('👑 النظام العربي المتكامل v15.1 - النسخة المستقرة');
-logger.fancy('═══════════════════════════════════════════════════');
+log('👑', '═══════════════════════════════════════════════════');
+log('👑', 'النظام العربي المتكامل v15.2 - النسخة المضمونة');
+log('👑', '═══════════════════════════════════════════════════');
 
 // ═══════════════════════════════════════════════════════════════
-// التحقق من المتغيرات البيئية
+// التحقق من المتغيرات
 // ═══════════════════════════════════════════════════════════════
 
 const TOKEN = process.env.TOKEN;
 const OWNER_ID = process.env.OWNER_ID;
 const PORT = process.env.PORT || 3000;
 
-logger.info('بدء التشغيل...');
-logger.info(`Node.js: ${process.version}`);
-logger.info(`المنفذ: ${PORT}`);
-
 if (!TOKEN) {
-    logger.fatal('TOKEN غير موجود!');
+    log('❌', 'TOKEN غير موجود!');
     process.exit(1);
 }
 
-if (TOKEN.length < 50) {
-    logger.warn('TOKEN يبدو قصير!');
-}
-
-logger.success('TOKEN موجود ✅');
-logger.info(`OWNER_ID: ${OWNER_ID || 'غير محدد'}`);
+log('✅', 'TOKEN موجود');
+log('ℹ️', `OWNER_ID: ${OWNER_ID}`);
 
 // ═══════════════════════════════════════════════════════════════
-// نظام قاعدة البيانات
+// قاعدة البيانات
 // ═══════════════════════════════════════════════════════════════
 
-class Database {
-    constructor() {
-        this.data = {};
-        this.file = './data/db.json';
-        try {
-            fs.ensureDirSync('./data');
-            if (fs.existsSync(this.file)) {
-                this.data = fs.readJsonSync(this.file);
-            }
-        } catch(e) {
-            logger.error('فشل تحميل DB', e.message);
-        }
+const db = {
+    data: {},
+    get: function(k) { return this.data[k] ?? null; },
+    set: function(k, v) { this.data[k] = v; return v; },
+    add: function(k, n) { return this.set(k, (this.get(k) || 0) + n); }
+};
+
+try {
+    fs.ensureDirSync('./data');
+    if (fs.existsSync('./data/db.json')) {
+        db.data = fs.readJsonSync('./data/db.json');
     }
-    
-    save() {
-        try {
-            fs.writeJsonSync(this.file, this.data);
-        } catch(e) {}
-    }
-    
-    get(k) { return this.data[k] ?? null; }
-    set(k, v) { this.data[k] = v; this.save(); return v; }
-    add(k, n) { return this.set(k, (this.get(k) || 0) + n); }
-}
+} catch(e) {}
 
-const db = new Database();
-logger.success('قاعدة البيانات جاهزة ✅');
+const saveDB = () => {
+    try { fs.writeJsonSync('./data/db.json', db.data); } catch(e) {}
+};
+
+log('✅', 'قاعدة البيانات جاهزة');
 
 // ═══════════════════════════════════════════════════════════════
-// Keep Alive Server - يستخدم PORT الصحيح
+// Keep Alive Server
 // ═══════════════════════════════════════════════════════════════
 
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`
-        <!DOCTYPE html>
-        <html dir="rtl">
-        <head>
-            <title>🤖 البوت العربي</title>
-            <meta charset="UTF-8">
-            <style>
-                body { font-family: Arial; background: #36393f; color: white; padding: 40px; }
-                .status { padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .online { background: #3ba55d; }
-                .offline { background: #ed4245; }
-                .info { background: #5865f2; }
-            </style>
-        </head>
-        <body>
-            <h1>🤖 النظام العربي المتكامل</h1>
-            <div class="status ${client?.readyAt ? 'online' : 'offline'}">
-                <h2>${client?.readyAt ? '🟢 البوت يعمل' : '🟡 جاري الاتصال...'}</h2>
-                <p>${client?.user?.tag || 'غير متصل'}</p>
-            </div>
-            <div class="info">
-                <p>📊 السيرفرات: ${client?.guilds?.cache?.size || 0}</p>
-                <p>👥 المستخدمين: ${client?.users?.cache?.size || 0}</p>
-                <p>⏱️ مدة التشغيل: ${Math.floor((Date.now() - startTime) / 1000)} ثانية</p>
-            </div>
-            <hr>
-            <p>🕐 آخر تحديث: ${new Date().toLocaleString('ar-SA')}</p>
-        </body>
-        </html>
-    `);
+    res.end(`<h1>🤖 البوت العربي</h1><p>الحالة: ${client.readyAt ? '🟢 متصل' : '🟡 جاري الاتصال'}</p><p>البوت: ${client.user?.tag || 'غير معروف'}</p>`);
 });
 
-const startTime = Date.now();
-
-server.listen(PORT, () => {
-    logger.success(`🌐 Keep Alive Server يعمل على المنفذ ${PORT}`);
-});
+server.listen(PORT, () => log('🌐', `Keep Alive Server على المنفذ ${PORT}`));
 
 // ═══════════════════════════════════════════════════════════════
 // تهيئة البوت
@@ -153,18 +85,13 @@ const client = new Client({
         GatewayIntentBits.GuildPresences
     ],
     partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember, Partials.Reaction],
-    failIfNotExists: false,
-    allowedMentions: { parse: ['users', 'roles'], repliedUser: true }
+    failIfNotExists: false
 });
-
-// ═══════════════════════════════════════════════════════════════
-// الإعدادات
-// ═══════════════════════════════════════════════════════════════
 
 const config = {
     prefix: '-',
     ownerID: OWNER_ID || '0',
-    color: {
+    colors: {
         primary: 0x5865F2,
         success: 0x57F287,
         danger: 0xED4245,
@@ -174,150 +101,185 @@ const config = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// دوال مساعدة
+// دالة الإمبد الآمنة 100%
 // ═══════════════════════════════════════════════════════════════
 
-function createEmbed(title, desc, color = 'primary') {
+function makeEmbed(title, description, colorName = 'primary') {
     try {
+        const color = config.colors[colorName] || config.colors.primary;
         return new EmbedBuilder()
-            .setColor(config.color[color] || config.color.primary)
-            .setTitle(title?.substring(0, 256) || 'بدون عنوان')
-            .setDescription(desc?.substring(0, 4096) || '')
+            .setColor(color)
+            .setTitle(String(title).substring(0, 256))
+            .setDescription(String(description).substring(0, 4096))
             .setTimestamp()
             .setFooter({ 
                 text: `النظام العربي | ${new Date().toLocaleDateString('ar-SA')}`,
                 iconURL: client.user?.displayAvatarURL() || undefined
             });
     } catch(e) {
-        return new EmbedBuilder().setDescription('⚠️ خطأ').setColor(config.color.danger);
+        // لو فشل الإمبد، نرجع نص عادي
+        return null;
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// الأوامر
+// دالة الرد الآمنة 100%
+// ═══════════════════════════════════════════════════════════════
+
+async function safeReply(message, content, isError = false) {
+    try {
+        // نحاول نرسل إمبد
+        const embed = makeEmbed(
+            isError ? '❌ خطأ' : '✅ تم',
+            content,
+            isError ? 'danger' : 'success'
+        );
+        
+        if (embed) {
+            return await message.reply({ embeds: [embed] });
+        }
+    } catch(e) {
+        log('⚠️', `فشل إرسال الإمبد: ${e.message}`);
+    }
+    
+    // لو فشل الإمبد، نرسل نص عادي
+    try {
+        return await message.reply({ content: content.substring(0, 2000) });
+    } catch(e2) {
+        log('❌', `فشل إرسال الرد: ${e2.message}`);
+        
+        // آخر محاولة: نرسل في الشات بدون ريبلاي
+        try {
+            return await message.channel.send({ content: `${message.author} ${content.substring(0, 1900)}` });
+        } catch(e3) {
+            log('💀', 'فشل كل المحاولات!');
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// الأوامر - مبسطة ومضمونة
 // ═══════════════════════════════════════════════════════════════
 
 const commands = {
+    // ═══ عامة ═══
     help: {
         name: 'مساعدة',
         aliases: ['help', 'h', 'commands', 'اوامر'],
-        category: 'عام',
-        execute: async (msg, args) => {
-            const embed = createEmbed(
-                '🤖 قائمة الأوامر',
-                '**الأوامر المتاحة:**\n\n' +
+        run: async (msg) => {
+            await safeReply(msg, 
+                '**📋 قائمة الأوامر:**\n\n' +
                 '⭐ **عام:** `-مساعدة` `-بينغ` `-معلومات` `-سيرفر`\n' +
-                '🛡️ **إدارة:** `-حظر` `-طرد` `-اسكات` `-مسح` `-قفل`\n' +
-                '💰 **اقتصاد:** `-يومية` `-رصيد` `-ايداع` `-سحب`\n' +
-                '🎮 **ترفيه:** `-قل` `-حجرة` `-تصويت`',
-                'primary'
+                '🛡️ **إدارة:** `-حظر` `-طرد` `-اسكات` `-مسح` `-قفل` `-فتح`\n' +
+                '💰 **اقتصاد:** `-يومية` `-رصيد`\n' +
+                '🎮 **ترفيه:** `-قل` `-حجرة`'
             );
-            await msg.reply({ embeds: [embed] });
         }
     },
 
     ping: {
         name: 'بينغ',
         aliases: ['ping', 'pong', 'سرعة'],
-        category: 'عام',
-        execute: async (msg) => {
-            const sent = await msg.reply({ embeds: [createEmbed('⏳ جاري القياس...', 'انتظر', 'warning')] });
+        run: async (msg) => {
+            const sent = await msg.reply({ content: '⏳ جاري القياس...' });
             const latency = sent.createdTimestamp - msg.createdTimestamp;
-            
-            await sent.edit({ 
-                embeds: [createEmbed(
-                    '🏓 بينغ!',
-                    `**البوت:** ${latency}ms\n**API:** ${Math.round(client.ws.ping)}ms`,
-                    latency < 100 ? 'success' : 'warning'
-                )]
-            });
+            await sent.edit({ content: `🏓 **بينغ!**\nالبوت: ${latency}ms\nAPI: ${Math.round(client.ws.ping)}ms` });
         }
     },
 
     userinfo: {
         name: 'معلومات',
         aliases: ['userinfo', 'user', 'عني', 'عضو'],
-        category: 'عام',
-        execute: async (msg) => {
+        run: async (msg) => {
             const target = msg.mentions.members.first() || msg.member;
-            const embed = createEmbed(
-                `👤 ${target.user.username}`,
-                `**الآيدي:** \`${target.id}\`\n**تاريخ الانضمام:** <t:${Math.floor(target.joinedTimestamp / 1000)}:R>\n**الرتب:** ${target.roles.cache.size - 1}`,
-                'info',
-                target.user.displayAvatarURL()
+            await safeReply(msg, 
+                `**👤 ${target.user.username}**\n` +
+                `الآيدي: \`${target.id}\`\n` +
+                `الانضمام: <t:${Math.floor(target.joinedTimestamp / 1000)}:R>\n` +
+                `الرتب: ${target.roles.cache.size - 1}`
             );
-            await msg.reply({ embeds: [embed] });
         }
     },
 
     serverinfo: {
         name: 'سيرفر',
         aliases: ['serverinfo', 'server', 'السيرفر'],
-        category: 'عام',
-        execute: async (msg) => {
+        run: async (msg) => {
             const g = msg.guild;
-            const embed = createEmbed(
-                `📢 ${g.name}`,
-                `**الأعضاء:** ${g.memberCount}\n**القنوات:** ${g.channels.cache.size}\n**التاريخ:** <t:${Math.floor(g.createdTimestamp / 1000)}:R>`,
-                'info',
-                g.iconURL()
+            await safeReply(msg,
+                `**📢 ${g.name}**\n` +
+                `الأعضاء: ${g.memberCount}\n` +
+                `القنوات: ${g.channels.cache.size}\n` +
+                `تاريخ الإنشاء: <t:${Math.floor(g.createdTimestamp / 1000)}:R>`
             );
-            await msg.reply({ embeds: [embed] });
         }
     },
 
-    // إدارة
+    // ═══ إدارة ═══
     ban: {
         name: 'حظر',
         aliases: ['ban', 'تبنيد', 'بان'],
-        category: 'إدارة',
-        permissions: ['BanMembers'],
-        execute: async (msg, args) => {
+        perms: ['BanMembers'],
+        run: async (msg, args) => {
             const target = msg.mentions.members.first();
-            if (!target) return msg.reply({ embeds: [createEmbed('❌ خطأ', 'منشن العضو', 'danger')] });
+            if (!target) return safeReply(msg, '❌ منشن العضو المراد حظره', true);
             
             const reason = args.slice(1).join(' ') || 'غير محدد';
+            
+            // تأكيد بالأزرار
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`ban_${target.id}`).setLabel('تأكيد').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId(`cancel_${target.id}`).setLabel('إلغاء').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder()
+                    .setCustomId(`ban_yes_${target.id}_${msg.author.id}`)
+                    .setLabel('✅ تأكيد')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`ban_no_${target.id}_${msg.author.id}`)
+                    .setLabel('❌ إلغاء')
+                    .setStyle(ButtonStyle.Secondary)
             );
             
-            const m = await msg.reply({ 
-                embeds: [createEmbed('⚠️ تأكيد الحظر', `حظر ${target}؟\nالسبب: ${reason}`, 'warning')],
+            const confirmMsg = await msg.reply({
+                content: `⚠️ **تأكيد الحظر**\nالعضو: ${target}\nالسبب: ${reason}`,
                 components: [row]
             });
             
-            db.set(`temp_${m.id}`, { action: 'ban', target: target.id, reason, mod: msg.author.id });
+            // حفظ البيانات مؤقتاً
+            db.set(`confirm_${confirmMsg.id}`, {
+                type: 'ban',
+                target: target.id,
+                reason: reason,
+                mod: msg.author.id,
+                time: Date.now()
+            });
+            saveDB();
         }
     },
 
     kick: {
         name: 'طرد',
         aliases: ['kick', 'كيك', 'اطرد'],
-        category: 'إدارة',
-        permissions: ['KickMembers'],
-        execute: async (msg, args) => {
+        perms: ['KickMembers'],
+        run: async (msg, args) => {
             const target = msg.mentions.members.first();
-            if (!target) return msg.reply({ embeds: [createEmbed('❌ خطأ', 'منشن العضو', 'danger')] });
+            if (!target) return safeReply(msg, '❌ منشن العضو', true);
             
             await target.kick(args.slice(1).join(' ') || 'غير محدد');
-            await msg.reply({ embeds: [createEmbed('👢 تم الطرد', `${target.user.tag} تم طرده`, 'success')] });
+            await safeReply(msg, `👢 **تم طرد** ${target.user.tag}`);
         }
     },
 
     clear: {
         name: 'مسح',
         aliases: ['clear', 'purge', 'امسح', 'تنظيف'],
-        category: 'إدارة',
-        permissions: ['ManageMessages'],
-        execute: async (msg, args) => {
+        perms: ['ManageMessages'],
+        run: async (msg, args) => {
             const amount = parseInt(args[0]);
             if (!amount || amount < 1 || amount > 100) {
-                return msg.reply({ embeds: [createEmbed('❌ خطأ', 'رقم من 1-100', 'danger')] });
+                return safeReply(msg, '❌ أدخل رقم من 1 إلى 100', true);
             }
             
             const deleted = await msg.channel.bulkDelete(amount + 1, true);
-            const m = await msg.channel.send({ embeds: [createEmbed('🧹 تم المسح', `تم مسح ${deleted.size - 1} رسالة`, 'success')] });
+            const m = await msg.channel.send(`🧹 تم مسح ${deleted.size - 1} رسالة`);
             setTimeout(() => m.delete().catch(() => {}), 3000);
         }
     },
@@ -325,71 +287,61 @@ const commands = {
     lock: {
         name: 'قفل',
         aliases: ['lock', 'اقفل'],
-        category: 'إدارة',
-        permissions: ['ManageChannels'],
-        execute: async (msg) => {
+        perms: ['ManageChannels'],
+        run: async (msg) => {
             await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: false });
-            await msg.reply({ embeds: [createEmbed('🔒 تم القفل', 'تم قفل القناة', 'danger')] });
+            await safeReply(msg, '🔒 **تم قفل القناة**');
         }
     },
 
     unlock: {
         name: 'فتح',
         aliases: ['unlock', 'افتح'],
-        category: 'إدارة',
-        permissions: ['ManageChannels'],
-        execute: async (msg) => {
+        perms: ['ManageChannels'],
+        run: async (msg) => {
             await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: true });
-            await msg.reply({ embeds: [createEmbed('🔓 تم الفتح', 'تم فتح القناة', 'success')] });
+            await safeReply(msg, '🔓 **تم فتح القناة**');
         }
     },
 
-    // اقتصاد
+    // ═══ اقتصاد ═══
     daily: {
         name: 'يومية',
         aliases: ['daily', 'هدية', 'هديه'],
-        category: 'اقتصاد',
-        execute: async (msg) => {
+        run: async (msg) => {
             const last = db.get(`daily_${msg.author.id}`);
             const now = Date.now();
             
             if (last && now - last < 86400000) {
-                const remaining = 86400000 - (now - last);
-                const hours = Math.floor(remaining / 3600000);
-                return msg.reply({ embeds: [createEmbed('⏳ انتظر', `بعد ${hours} ساعة`, 'warning')] });
+                const hours = Math.floor((86400000 - (now - last)) / 3600000);
+                return safeReply(msg, `⏳ انتظر ${hours} ساعة`, true);
             }
             
             const amount = Math.floor(Math.random() * 1000) + 500;
             db.add(`money_${msg.author.id}`, amount);
             db.set(`daily_${msg.author.id}`, now);
+            saveDB();
             
-            await msg.reply({ 
-                embeds: [createEmbed('🎁 مكافأة يومية', `حصلت على ${amount} عملة! رصيدك: ${db.get(`money_${msg.author.id}`)}`, 'success')] 
-            });
+            const total = db.get(`money_${msg.author.id}`);
+            await safeReply(msg, `🎁 **مكافأة يومية!**\nحصلت على: ${amount} عملة\nرصيدك الكلي: ${total}`);
         }
     },
 
     balance: {
         name: 'رصيد',
         aliases: ['balance', 'bal', 'فلوس', 'كاش'],
-        category: 'اقتصاد',
-        execute: async (msg) => {
+        run: async (msg) => {
             const target = msg.mentions.users.first() || msg.author;
             const bal = db.get(`money_${target.id}`) || 0;
-            const bank = db.get(`bank_${target.id}`) || 0;
-            
-            await msg.reply({ 
-                embeds: [createEmbed('💰 الرصيد', `**${target.username}**\n💵 نقدي: ${bal}\n🏦 بنك: ${bank}\n💎 الكلي: ${bal + bank}`, 'info', target.displayAvatarURL())] 
-            });
+            await safeReply(msg, `💰 **رصيد ${target.username}**\n${bal} عملة`);
         }
     },
 
-    // ترفيه
+    // ═══ ترفيه ═══
     say: {
         name: 'قل',
         aliases: ['say', 'echo', 'اكتب'],
-        category: 'ترفيه',
-        execute: async (msg, args) => {
+        run: async (msg, args) => {
             const text = args.join(' ');
             if (!text) return;
             await msg.delete().catch(() => {});
@@ -400,53 +352,43 @@ const commands = {
     rps: {
         name: 'حجرة',
         aliases: ['rps', 'حجرة-ورقة-مقص'],
-        category: 'ترفيه',
-        execute: async (msg, args) => {
+        run: async (msg, args) => {
             const choices = ['حجرة', 'ورقة', 'مقص'];
-            const userChoice = args[0];
+            const user = args[0];
             
-            if (!choices.includes(userChoice)) {
-                return msg.reply({ embeds: [createEmbed('❌ خطأ', 'اختر: حجرة، ورقة، أو مقص', 'danger')] });
+            if (!choices.includes(user)) {
+                return safeReply(msg, '❌ اختر: حجرة، ورقة، أو مقص', true);
             }
             
-            const botChoice = choices[Math.floor(Math.random() * choices.length)];
+            const bot = choices[Math.floor(Math.random() * choices.length)];
             let result = 'تعادل! 🤝';
-            let color = 'warning';
             
             if (
-                (userChoice === 'حجرة' && botChoice === 'مقص') ||
-                (userChoice === 'ورقة' && botChoice === 'حجرة') ||
-                (userChoice === 'مقص' && botChoice === 'ورقة')
-            ) {
-                result = 'فزت! 🎉';
-                color = 'success';
-            } else if (userChoice !== botChoice) {
-                result = 'خسرت! 😢';
-                color = 'danger';
-            }
+                (user === 'حجرة' && bot === 'مقص') ||
+                (user === 'ورقة' && bot === 'حجرة') ||
+                (user === 'مقص' && bot === 'ورقة')
+            ) result = 'فزت! 🎉';
+            else if (user !== bot) result = 'خسرت! 😢';
             
-            await msg.reply({ 
-                embeds: [createEmbed('🎮 حجرة ورقة مقص', `أنت: ${userChoice}\nأنا: ${botChoice}\n\n${result}`, color)] 
-            });
+            await safeReply(msg, `🎮 **حجرة ورقة مقص**\nأنت: ${user}\nأنا: ${bot}\n\n**${result}**`);
         }
     },
 
-    // مالك
+    // ═══ مالك ═══
     eval: {
         name: 'تقييم',
         aliases: ['eval', 'e', 'كود'],
-        category: 'مالك',
-        execute: async (msg, args) => {
+        run: async (msg, args) => {
             if (msg.author.id !== config.ownerID) {
-                return msg.reply({ embeds: [createEmbed('❌ ممنوع', 'للمالك فقط!', 'danger')] });
+                return safeReply(msg, '❌ للمالك فقط!', true);
             }
             
             try {
                 let result = eval(args.join(' '));
                 if (typeof result !== 'string') result = require('util').inspect(result, { depth: 0 });
-                await msg.reply({ embeds: [createEmbed('✅ نتيجة', `\`\`\`js\n${result.slice(0, 4000)}\n\`\`\``, 'success')] });
+                await safeReply(msg, `\`\`\`js\n${result.slice(0, 3900)}\n\`\`\``);
             } catch (err) {
-                await msg.reply({ embeds: [createEmbed('❌ خطأ', err.message, 'danger')] });
+                await safeReply(msg, `❌ **خطأ:**\n${err.message}`, true);
             }
         }
     },
@@ -454,109 +396,121 @@ const commands = {
     restart: {
         name: 'اعادة',
         aliases: ['restart', 'ريستارت', 'تحديث'],
-        category: 'مالك',
-        execute: async (msg) => {
+        run: async (msg) => {
             if (msg.author.id !== config.ownerID) return;
-            await msg.reply({ embeds: [createEmbed('🔄 إعادة تشغيل', 'جاري...', 'warning')] });
+            await safeReply(msg, '🔄 **جاري إعادة التشغيل...**');
             process.exit(0);
         }
     }
 };
 
 // ═══════════════════════════════════════════════════════════════
-// الأحداث
+// الأحداث - معالجة آمنة 100%
 // ═══════════════════════════════════════════════════════════════
 
 client.once('ready', () => {
-    logger.fancy('═══════════════════════════════════════════════════');
-    logger.success(`البوت ${client.user.tag} متصل!`);
-    logger.info(`السيرفرات: ${client.guilds.cache.size}`);
-    logger.info(`المستخدمين: ${client.users.cache.size}`);
-    logger.fancy('═══════════════════════════════════════════════════');
+    log('✅', '═══════════════════════════════════════════════════');
+    log('✅', `البوت ${client.user.tag} متصل!`);
+    log('✅', `السيرفرات: ${client.guilds.cache.size}`);
+    log('✅', `المستخدمين: ${client.users.cache.size}`);
+    log('✅', '═══════════════════════════════════════════════════');
     
     client.user.setActivity('-مساعدة | النظام العربي', { type: 0 });
 });
 
 client.on('messageCreate', async (msg) => {
     try {
-        if (msg.author.bot || !msg.guild) return;
-        if (!msg.content.startsWith(config.prefix)) return;
+        // التحققات الأساسية
+        if (!msg.guild) return; // لا نرد على DM
+        if (msg.author.bot) return; // لا نرد على بوتات
+        if (!msg.content.startsWith(config.prefix)) return; // يبدأ بالبادئة
         
         const args = msg.content.slice(config.prefix.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
         
-        const cmd = Object.values(commands).find(c => c.name === cmdName || c.aliases.includes(cmdName));
-        if (!cmd) return;
+        // البحث عن الأمر
+        const cmd = Object.values(commands).find(c => 
+            c.name === cmdName || c.aliases.includes(cmdName)
+        );
         
-        // صلاحيات
-        if (cmd.permissions) {
-            const missing = cmd.permissions.filter(p => !msg.member.permissions.has(PermissionsBitField.Flags[p]));
+        if (!cmd) return; // أمر غير موجود
+        
+        log('⌨️', `أمر: ${cmd.name} من ${msg.author.tag}`);
+        
+        // التحقق من الصلاحيات
+        if (cmd.perms) {
+            const missing = cmd.perms.filter(p => !msg.member.permissions.has(PermissionsBitField.Flags[p]));
             if (missing.length > 0) {
-                return msg.reply({ embeds: [createEmbed('🛡️ صلاحيات', `تحتاج: ${missing.join(', ')}`, 'danger')] });
+                return await safeReply(msg, `🛡️ **تحتاج صلاحية:** ${missing.join(', ')}`, true);
             }
         }
         
-        logger.info(`أمر: ${cmd.name} من ${msg.author.tag}`);
-        await cmd.execute(msg, args);
+        // تنفيذ الأمر
+        await cmd.run(msg, args);
         
     } catch (err) {
-        logger.error('خطأ في أمر', err.message);
+        log('❌', `خطأ في أمر: ${err.message}`);
+        console.error(err);
     }
 });
 
+// معالجة الأزرار (التأكيدات)
 client.on('interactionCreate', async (interaction) => {
     try {
         if (!interaction.isButton()) return;
         
-        const data = db.get(`temp_${interaction.message.id}`);
+        const data = db.get(`confirm_${interaction.message.id}`);
         if (!data) return;
         
-        if (interaction.customId.startsWith('ban_')) {
-            if (interaction.user.id !== data.mod) {
-                return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
-            }
-            
-            const member = await interaction.guild.members.fetch(data.target);
-            await member.ban({ reason: data.reason });
-            await interaction.update({ 
-                embeds: [createEmbed('🔨 تم الحظر', `${member.user.tag} تم حظره`, 'success')],
-                components: []
-            });
-            db.set(`temp_${interaction.message.id}`, null);
+        // التحقق من صاحب الأمر
+        if (interaction.user.id !== data.mod) {
+            return await interaction.reply({ content: '❌ ليس لديك صلاحية!', ephemeral: true });
         }
         
-        if (interaction.customId.startsWith('cancel_')) {
+        if (interaction.customId.startsWith('ban_yes_')) {
+            const member = await interaction.guild.members.fetch(data.target).catch(() => null);
+            if (member) {
+                await member.ban({ reason: data.reason });
+                await interaction.update({ 
+                    content: `🔨 **تم حظر** ${member.user.tag}`, 
+                    components: [] 
+                });
+            } else {
+                await interaction.update({ 
+                    content: '❌ **العضو غير موجود**', 
+                    components: [] 
+                });
+            }
+        } else if (interaction.customId.startsWith('ban_no_')) {
             await interaction.update({ 
-                embeds: [createEmbed('❌ تم الإلغاء', 'تم إلغاء العملية', 'secondary')],
-                components: []
+                content: '❌ **تم الإلغاء**', 
+                components: [] 
             });
-            db.set(`temp_${interaction.message.id}`, null);
         }
+        
+        db.set(`confirm_${interaction.message.id}`, null);
+        saveDB();
         
     } catch (err) {
-        logger.error('خطأ في interaction', err.message);
+        log('❌', `خطأ في interaction: ${err.message}`);
     }
 });
 
-// أخطاء
-client.on('error', (err) => logger.error('Discord Error', err.message));
-process.on('unhandledRejection', (err) => logger.error('Unhandled Rejection', err.message));
-process.on('uncaughtException', (err) => logger.fatal('Uncaught Exception', err.message));
+// معالجة الأخطاء العامة
+client.on('error', (err) => log('❌', `Discord Error: ${err.message}`));
+process.on('unhandledRejection', (err) => log('❌', `Unhandled: ${err.message}`));
+process.on('uncaughtException', (err) => log('💀', `Exception: ${err.message}`));
 
 // ═══════════════════════════════════════════════════════════════
 // تسجيل الدخول
 // ═══════════════════════════════════════════════════════════════
 
-logger.info('🔄 جاري الاتصال...');
+log('🔄', 'جاري الاتصال...');
 
 client.login(TOKEN).then(() => {
-    logger.success('✅ تم تسجيل الدخول!');
+    log('✅', 'تم تسجيل الدخول!');
 }).catch((err) => {
-    logger.fatal('❌ فشل الدخول!', err.message);
-    
-    if (err.message.includes('token')) {
-        logger.error('🔴 التوكن غلط!');
-    } else if (err.message.includes('intents')) {
-        logger.error('🔴 فعل الـ 3 Intents في Discord Developer Portal');
-    }
+    log('❌', `فشل الدخول: ${err.message}`);
+    if (err.message.includes('token')) log('💡', 'التوكن غلط!');
+    if (err.message.includes('intents')) log('💡', 'فعل الـ 3 Intents!');
 });
