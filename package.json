@@ -1,7 +1,7 @@
 {
-  "name": "arabic-bot-system",
+  "name": "arabic-bot-pro",
   "version": "14.0.0",
-  "description": "أقوى بوت عربي متكامل في تاريخ الديسكورد",
+  "description": "أقوى بوت عربي متكامل - نسخة برو",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -9,13 +9,9 @@
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "quick.db": "^9.1.7",
-    "moment": "^2.29.4",
+    "dotenv": "^16.3.1",
     "ms": "^2.1.3",
-    "axios": "^1.6.2",
-    "canvas": "^2.11.2",
-    "fs-extra": "^11.1.1",
-    "path": "^0.12.7"
+    "fs-extra": "^11.1.1"
   },
   "engines": {
     "node": ">=18.0.0"
