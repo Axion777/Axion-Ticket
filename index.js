@@ -1,474 +1,309 @@
-// ═══════════════════════════════════════════════════════════════
-// 🤖 النظام العربي المتكامل v16.1 - نسخة التحقق المزدوج
-// ═══════════════════════════════════════════════════════════════
+// index.js (النسخة النهائية والمعدلة للأرشفة)
 
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
-const fs = require('fs-extra');
-const http = require('http');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField } = require('discord.js');
+const express = require('express');
 
-// ═══════════════════════════════════════════════════════════════
-// اللوجز
-// ═══════════════════════════════════════════════════════════════
+// ===============================================
+// 1. المتغيرات والتهيئة - يعتمد على متغيرات Render
+// ===============================================
 
-const logs = [];
-function log(emoji, msg) {
-    const time = new Date().toLocaleTimeString('ar-SA');
-    const entry = `[${time}] ${emoji} ${msg}`;
-    console.log(entry);
-    logs.push(entry);
-    try {
-        fs.appendFileSync('./bot.log', entry + '\n');
-    } catch(e) {}
-}
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const MANAGER_ROLE_ID = process.env.MANAGER_ROLE_ID;
+const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID; 
+const PREFIX = '-'; // علامة البريفكس
 
-log('👑', '═══════════════════════════════════════════════════');
-log('👑', 'النظام العربي المتكامل v16.1 - نسخة التحقق المزدوج');
-log('👑', '═══════════════════════════════════════════════════');
-
-// ═══════════════════════════════════════════════════════════════
-// التحقق من المتغيرات
-// ═══════════════════════════════════════════════════════════════
-
-const TOKEN = process.env.TOKEN;
-const OWNER_ID = process.env.OWNER_ID;
-const PORT = process.env.PORT || 3000;
-
-log('🔍', `TOKEN موجود: ${!!TOKEN}`);
-log('🔍', `TOKEN الطول: ${TOKEN?.length || 0}`);
-log('🔍', `OWNER_ID: ${OWNER_ID}`);
-log('🔍', `PORT: ${PORT}`);
-
-if (!TOKEN || TOKEN.length < 50) {
-    log('💀', 'TOKEN غير صالح!');
-    process.exit(1);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Keep Alive Server - يشتغل فوراً
-// ═══════════════════════════════════════════════════════════════
-
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`
-        <h1>🤖 البوت العربي</h1>
-        <p>الحالة: ${client?.readyAt ? '🟢 متصل' : '🟡 جاري الاتصال...'}</p>
-        <p>البوت: ${client?.user?.tag || 'غير معروف'}</p>
-        <p>السجلات:</p>
-        <pre>${logs.slice(-20).join('\n')}</pre>
-    `);
-});
-
-server.listen(PORT, '0.0.0.0', () => {
-    log('🌐', `Keep Alive Server على المنفذ ${PORT}`);
-});
-
-// ═══════════════════════════════════════════════════════════════
-// قاعدة البيانات
-// ═══════════════════════════════════════════════════════════════
-
-const db = {
-    data: {},
-    get: k => db.data[k] ?? null,
-    set: (k, v) => { db.data[k] = v; db.save(); return v; },
-    add: (k, n) => db.set(k, (db.get(k) || 0) + n),
-    save: () => {
-        try {
-            fs.ensureDirSync('./data');
-            fs.writeJsonSync('./data/db.json', db.data);
-        } catch(e) {}
-    }
-};
-
-try {
-    if (fs.existsSync('./data/db.json')) {
-        db.data = fs.readJsonSync('./data/db.json');
-    }
-} catch(e) {}
-
-log('✅', 'قاعدة البيانات جاهزة');
-
-// ═══════════════════════════════════════════════════════════════
-// تهيئة البوت - بدون presence
-// ═══════════════════════════════════════════════════════════════
+// مُعرف فئة الأرشيف الجديدة
+const ARCHIVE_CATEGORY_ID = '1449459496144470056'; 
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.GuildPresences
-    ],
-    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.GuildMember, Partials.Reaction],
-    failIfNotExists: false
-    // ⚠️ لا presence هنا!
+    ]
 });
 
-const config = {
-    prefix: '-',
-    ownerID: OWNER_ID || '0',
-    colors: {
-        primary: 0x5865F2,
-        success: 0x57F287,
-        danger: 0xED4245,
-        warning: 0xFEE75C,
-        info: 0xEB459E
+const SERVICE_OPTIONS = {
+    'programming_services': {
+        label: ' طلب خدمات برمجية',
+        description: 'اطلب تطوير بوتات، مواقع، أو سكربتات خاصة.',
+        emoji: '💻',
+        categoryName: 'خدمات-برمجية'
+    },
+    'account_installation': {
+        label: ' تثبيت حسابات ديسكورد',
+        description: 'اطلب تثبيت حسابك/حساباتك في ديسكورد.',
+        emoji: '✅',
+        categoryName: 'تثبيت-حسابات'
+    },
+    'general_ticket': { 
+        label: ' تكت عام/استفسار',
+        description: 'للاستفسارات العامة أو الطلبات غير المدرجة.',
+        emoji: '🎫',
+        categoryName: 'تكت-عام'
     }
 };
 
-// ═══════════════════════════════════════════════════════════════
-// دالة الرد الآمنة
-// ═══════════════════════════════════════════════════════════════
+// ===============================================
+// 2. الدوال المساعدة
+// ===============================================
 
-async function reply(msg, content, isError = false) {
-    try {
-        const embed = new EmbedBuilder()
-            .setColor(isError ? config.colors.danger : config.colors.success)
-            .setTitle(isError ? '❌ خطأ' : '✅ تم')
-            .setDescription(String(content).substring(0, 4096))
-            .setTimestamp()
-            .setFooter({ 
-                text: `النظام العربي | ${new Date().toLocaleDateString('ar-SA')}`,
-                iconURL: client.user?.displayAvatarURL() || undefined
-            });
-        
-        return await msg.reply({ embeds: [embed] });
-    } catch(e1) {
-        try {
-            return await msg.reply({ content: (isError ? '❌ ' : '✅ ') + String(content).substring(0, 1950) });
-        } catch(e2) {
-            try {
-                return await msg.channel.send({ content: `${msg.author} ${String(content).substring(0, 1900)}` });
-            } catch(e3) {
-                log('💀', 'فشل الرد!');
-            }
+function createComponents() {
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('service_select_menu')
+        .setPlaceholder('اختر نوع الخدمة التي تحتاجها...')
+        .addOptions(
+            Object.keys(SERVICE_OPTIONS).map(key => ({
+                label: SERVICE_OPTIONS[key].label,
+                description: SERVICE_OPTIONS[key].description,
+                value: key,
+                emoji: SERVICE_OPTIONS[key].emoji
+            }))
+        );
+
+    const selectRow = new ActionRowBuilder().addComponents(selectMenu);
+    return [selectRow]; 
+}
+
+function createTicketComponents() {
+    const closeButton = new ButtonBuilder()
+        .setCustomId('close_ticket')
+        .setLabel('إغلاق التكت')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒');
+
+    const claimButton = new ButtonBuilder()
+        .setCustomId('claim_ticket')
+        .setLabel('تولي التكت')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('✋');
+
+    return new ActionRowBuilder().addComponents(claimButton, closeButton);
+}
+
+// ===============================================
+// 3. أحداث البوت (Commands & Interactions)
+// ===============================================
+
+client.on('ready', () => {
+    console.log(`✅ البوت جاهز! تم تسجيل الدخول باسم: ${client.user.tag}`);
+    client.user.setActivity(`فتح التكتات | ${PREFIX}setup`, { type: 3 });
+});
+
+// التعامل مع أمر البريفكس (-setup)
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
+
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    if (commandName === 'setup') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply({ content: '❌ لا تملك صلاحية استخدام هذا الأمر (مطلوب: مسؤول).'});
         }
+
+        const serviceList = Object.values(SERVICE_OPTIONS).map(opt => `${opt.emoji} **${opt.label}**: ${opt.description}`).join('\n');
+        
+        const setupEmbed = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle('🎫 نظام التكتات والخدمات')
+            .setThumbnail(message.guild.iconURL({ dynamic: true }))
+            .setDescription('**مرحباً بك!**\n\nلطلب إحدى خدماتنا، يرجى اختيار نوع الخدمة المطلوبة من القائمة المنسدلة أدناه.\n\nسيتم فتح قناة خاصة لك وللمسؤولين للحديث حول طلبك.')
+            .addFields(
+                { name: '💻 خدماتنا المتاحة:', value: serviceList, inline: false }, 
+                { name: '⚠️ ملاحظة:', value: 'الرجاء توضيح طلبك بتفصيل بمجرد فتح التكت لتسريع عملية التنفيذ.', inline: false }
+            )
+            .setTimestamp()
+            .setFooter({ text: client.user.username, iconURL: client.user.displayAvatarURL() });
+
+        try {
+            await message.channel.send({
+                embeds: [setupEmbed],
+                components: createComponents()
+            });
+            await message.delete().catch(() => {});
+            await message.channel.send({ content: '✅ تم إرسال رسالة إعداد نظام التكتات بنجاح!' }).then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
+        } catch (error) {
+            console.error('فشل في إرسال رسالة الإعداد:', error);
+            await message.reply({ content: '❌ حدث خطأ أثناء إرسال رسالة الإعداد.' });
+        }
+    }
+});
+
+
+// التعامل مع التفاعلات (القائمة المنسدلة والأزرار) 
+client.on('interactionCreate', async interaction => {
+    if (interaction.isButton()) {
+        if (interaction.customId === 'close_ticket') {
+            await handleTicketClose(interaction);
+        } else if (interaction.customId === 'claim_ticket') {
+            await handleTicketClaim(interaction);
+        }
+    } else if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'service_select_menu') {
+            const selectedValue = interaction.values[0];
+            await openTicket(interaction, selectedValue);
+        }
+    }
+});
+
+async function openTicket(interaction, serviceKey) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const guild = interaction.guild;
+    const member = interaction.member;
+
+    const existingTicket = guild.channels.cache.find(c =>
+        c.name.startsWith(`ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`) && c.topic === member.user.id
+    );
+    if (existingTicket) {
+        return interaction.editReply({ content: `❌ لديك بالفعل تكت مفتوح: ${existingTicket}`, ephemeral: true });
+    }
+
+    const serviceInfo = SERVICE_OPTIONS[serviceKey];
+    const channelName = serviceInfo ? `${serviceInfo.categoryName.toLowerCase()}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}` : `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
+    try {
+        const ticketChannel = await guild.channels.create({
+            name: channelName.substring(0, 100),
+            type: ChannelType.GuildText,
+            topic: member.user.id,
+            permissionOverwrites: [
+                { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: MANAGER_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+            ],
+        });
+
+        const ticketEmbed = new EmbedBuilder()
+            .setColor(serviceInfo ? '#00ff00' : '#ffff00')
+            .setTitle(`🎫 تكت جديد: ${serviceInfo ? serviceInfo.label : 'تكت عام'}`)
+            .setDescription(`**مرحباً بك يا ${member}!**\n\nيرجى وصف طلبك بالتفصيل هنا. سيتم التواصل معك من قِبل المسؤولين قريباً.\n\n${serviceInfo ? `**نوع الخدمة المطلوبة:** ${serviceInfo.label}` : ''}`)
+            .setTimestamp();
+
+        await ticketChannel.send({
+            content: `${member} | منشن المسؤولين: <@&${MANAGER_ROLE_ID}>`,
+            embeds: [ticketEmbed],
+            components: [createTicketComponents()]
+        });
+
+        await interaction.editReply({ content: `✅ تم فتح التكت بنجاح! تفضل بالذهاب إليه: ${ticketChannel}`, ephemeral: true });
+
+    } catch (error) {
+        console.error('فشل في فتح التكت:', error);
+        await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة فتح التكت.', ephemeral: true });
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// الأوامر
-// ═══════════════════════════════════════════════════════════════
+async function handleTicketClose(interaction) {
+    await interaction.deferReply({ ephemeral: true });
 
-const commands = {
-    help: {
-        name: 'مساعدة',
-        aliases: ['help', 'h', 'commands', 'اوامر'],
-        run: async (msg) => {
-            await reply(msg, 
-                '**📋 قائمة الأوامر:**\n\n' +
-                '⭐ **عام:** `-مساعدة` `-بينغ` `-معلومات` `-سيرفر`\n' +
-                '🛡️ **إدارة:** `-حظر` `-طرد` `-مسح` `-قفل` `-فتح`\n' +
-                '💰 **اقتصاد:** `-يومية` `-رصيد`\n' +
-                '🎮 **ترفيه:** `-قل` `-حجرة`'
-            );
-        }
-    },
-
-    ping: {
-        name: 'بينغ',
-        aliases: ['ping', 'pong', 'سرعة'],
-        run: async (msg) => {
-            const sent = await msg.reply({ content: '⏳ جاري القياس...' });
-            const latency = sent.createdTimestamp - msg.createdTimestamp;
-            await sent.edit({ 
-                content: `🏓 **بينغ!**\nالبوت: ${latency}ms\nAPI: ${Math.round(client.ws.ping)}ms`
-            });
-        }
-    },
-
-    userinfo: {
-        name: 'معلومات',
-        aliases: ['userinfo', 'user', 'عني', 'عضو'],
-        run: async (msg) => {
-            const target = msg.mentions.members.first() || msg.member;
-            await reply(msg, 
-                `**👤 ${target.user.username}**\n` +
-                `الآيدي: \`${target.id}\`\n` +
-                `الانضمام: <t:${Math.floor(target.joinedTimestamp / 1000)}:R>\n` +
-                `الرتب: ${target.roles.cache.size - 1}`
-            );
-        }
-    },
-
-    serverinfo: {
-        name: 'سيرفر',
-        aliases: ['serverinfo', 'server', 'السيرفر'],
-        run: async (msg) => {
-            const g = msg.guild;
-            await reply(msg,
-                `**📢 ${g.name}**\n` +
-                `الأعضاء: ${g.memberCount}\n` +
-                `القنوات: ${g.channels.cache.size}\n` +
-                `التاريخ: <t:${Math.floor(g.createdTimestamp / 1000)}:R>`
-            );
-        }
-    },
-
-    ban: {
-        name: 'حظر',
-        aliases: ['ban', 'تبنيد', 'بان'],
-        perms: ['BanMembers'],
-        run: async (msg, args) => {
-            const target = msg.mentions.members.first();
-            if (!target) return reply(msg, '❌ منشن العضو', true);
-            
-            const reason = args.slice(1).join(' ') || 'غير محدد';
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`ban_yes_${target.id}_${msg.author.id}`).setLabel('تأكيد').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId(`ban_no_${target.id}_${msg.author.id}`).setLabel('إلغاء').setStyle(ButtonStyle.Secondary)
-            );
-            
-            const confirmMsg = await msg.reply({
-                content: `⚠️ تأكيد حظر ${target}\nالسبب: ${reason}`,
-                components: [row]
-            });
-            
-            db.set(`confirm_${confirmMsg.id}`, { target: target.id, reason, mod: msg.author.id });
-        }
-    },
-
-    kick: {
-        name: 'طرد',
-        aliases: ['kick', 'كيك', 'اطرد'],
-        perms: ['KickMembers'],
-        run: async (msg, args) => {
-            const target = msg.mentions.members.first();
-            if (!target) return reply(msg, '❌ منشن العضو', true);
-            await target.kick(args.slice(1).join(' ') || 'غير محدد');
-            await reply(msg, `👢 تم طرد ${target.user.tag}`);
-        }
-    },
-
-    clear: {
-        name: 'مسح',
-        aliases: ['clear', 'purge', 'امسح', 'تنظيف'],
-        perms: ['ManageMessages'],
-        run: async (msg, args) => {
-            const amount = parseInt(args[0]);
-            if (!amount || amount < 1 || amount > 100) return reply(msg, '❌ رقم من 1-100', true);
-            const deleted = await msg.channel.bulkDelete(amount + 1, true);
-            const m = await msg.channel.send(`🧹 تم مسح ${deleted.size - 1} رسالة`);
-            setTimeout(() => m.delete().catch(() => {}), 3000);
-        }
-    },
-
-    lock: {
-        name: 'قفل',
-        aliases: ['lock', 'اقفل'],
-        perms: ['ManageChannels'],
-        run: async (msg) => {
-            await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: false });
-            await reply(msg, '🔒 تم قفل القناة');
-        }
-    },
-
-    unlock: {
-        name: 'فتح',
-        aliases: ['unlock', 'افتح'],
-        perms: ['ManageChannels'],
-        run: async (msg) => {
-            await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: true });
-            await reply(msg, '🔓 تم فتح القناة');
-        }
-    },
-
-    daily: {
-        name: 'يومية',
-        aliases: ['daily', 'هدية', 'هديه'],
-        run: async (msg) => {
-            const last = db.get(`daily_${msg.author.id}`);
-            const now = Date.now();
-            
-            if (last && now - last < 86400000) {
-                const hours = Math.floor((86400000 - (now - last)) / 3600000);
-                return reply(msg, `⏳ انتظر ${hours} ساعة`, true);
-            }
-            
-            const amount = Math.floor(Math.random() * 1000) + 500;
-            db.add(`money_${msg.author.id}`, amount);
-            db.set(`daily_${msg.author.id}`, now);
-            
-            await reply(msg, `🎁 حصلت على ${amount} عملة!`);
-        }
-    },
-
-    balance: {
-        name: 'رصيد',
-        aliases: ['balance', 'bal', 'فلوس', 'كاش'],
-        run: async (msg) => {
-            const target = msg.mentions.users.first() || msg.author;
-            const bal = db.get(`money_${target.id}`) || 0;
-            await reply(msg, `💰 رصيد ${target.username}: ${bal} عملة`);
-        }
-    },
-
-    say: {
-        name: 'قل',
-        aliases: ['say', 'echo', 'اكتب'],
-        run: async (msg, args) => {
-            const text = args.join(' ');
-            if (!text) return;
-            await msg.delete().catch(() => {});
-            await msg.channel.send(text);
-        }
-    },
-
-    rps: {
-        name: 'حجرة',
-        aliases: ['rps', 'حجرة-ورقة-مقص'],
-        run: async (msg, args) => {
-            const choices = ['حجرة', 'ورقة', 'مقص'];
-            const user = args[0];
-            if (!choices.includes(user)) return reply(msg, '❌ اختر: حجرة، ورقة، أو مقص', true);
-            
-            const bot = choices[Math.floor(Math.random() * choices.length)];
-            let result = 'تعادل! 🤝';
-            
-            if (
-                (user === 'حجرة' && bot === 'مقص') ||
-                (user === 'ورقة' && bot === 'حجرة') ||
-                (user === 'مقص' && bot === 'ورقة')
-            ) result = 'فزت! 🎉';
-            else if (user !== bot) result = 'خسرت! 😢';
-            
-            await reply(msg, `🎮 أنت: ${user} | أنا: ${bot}\n**${result}**`);
-        }
-    },
-
-    eval: {
-        name: 'تقييم',
-        aliases: ['eval', 'e', 'كود'],
-        run: async (msg, args) => {
-            if (msg.author.id !== config.ownerID) return reply(msg, '❌ للمالك فقط!', true);
-            try {
-                let result = eval(args.join(' '));
-                if (typeof result !== 'string') result = require('util').inspect(result, { depth: 0 });
-                await reply(msg, `\`\`\`js\n${result.slice(0, 3900)}\n\`\`\``);
-            } catch (err) {
-                await reply(msg, `❌ ${err.message}`, true);
-            }
-        }
-    },
-
-    restart: {
-        name: 'اعادة',
-        aliases: ['restart', 'ريستارت', 'تحديث'],
-        run: async (msg) => {
-            if (msg.author.id !== config.ownerID) return;
-            await reply(msg, '🔄 جاري إعادة التشغيل...');
-            process.exit(0);
-        }
+    if (!interaction.member.roles.cache.has(MANAGER_ROLE_ID)) {
+        return interaction.editReply({ content: '❌ لا تملك صلاحية إغلاق التكت. هذه الصلاحية للمسؤولين فقط.', ephemeral: true });
     }
-};
 
-// ═══════════════════════════════════════════════════════════════
-// الأحداث
-// ═══════════════════════════════════════════════════════════════
+    const channel = interaction.channel;
+    const ticketOwnerId = channel.topic;
 
-client.once('ready', () => {
-    log('✅', '═══════════════════════════════════════════════════');
-    log('✅', `البوت ${client.user.tag} متصل!`);
-    log('✅', `السيرفرات: ${client.guilds.cache.size}`);
-    log('✅', `المستخدمين: ${client.users.cache.size}`);
-    log('✅', '═══════════════════════════════════════════════════');
-    
-    // نضبط الـ presence بعد ما نتصل
-    client.user.setActivity('-مساعدة | النظام العربي', { type: 0 });
-});
+    if (!ticketOwnerId) {
+        return interaction.editReply({ content: '❌ يبدو أن هذه القناة ليست تكت صالح.', ephemeral: true });
+    }
 
-client.on('messageCreate', async (msg) => {
     try {
-        if (!msg.guild || msg.author.bot) return;
-        if (!msg.content.startsWith(config.prefix)) return;
+        await channel.send(`🔒 **تم إغلاق التكت بواسطة: ${interaction.user}**\nجاري أرشفة القناة ونقلها إلى سجلات السيرفر.`);
         
-        const args = msg.content.slice(config.prefix.length).trim().split(/ +/);
-        const cmdName = args.shift().toLowerCase();
+        // 1. إزالة صلاحية المشاهدة عن صاحب التكت
+        // (إذا كان صاحب التكت لا يزال في السيرفر)
+        await channel.permissionOverwrites.edit(ticketOwnerId, {
+            ViewChannel: false
+        }).catch(() => console.log('تعذر تعديل صلاحيات صاحب التكت (قد يكون غادر).'));
+
+        // 2. نقل القناة إلى فئة الأرشيف
+        await channel.setParent(ARCHIVE_CATEGORY_ID, { lockPermissions: false });
         
-        const cmd = Object.values(commands).find(c => 
-            c.name === cmdName || c.aliases.includes(cmdName)
-        );
-        
-        if (!cmd) return;
-        
-        if (cmd.perms) {
-            const missing = cmd.perms.filter(p => 
-                !msg.member.permissions.has(PermissionsBitField.Flags[p])
-            );
-            if (missing.length > 0) {
-                return await reply(msg, `🛡️ تحتاج: ${missing.join(', ')}`, true);
-            }
+        // 3. تعديل اسم القناة للإشارة إلى أنها مغلقة
+        await channel.setName(`closed-${channel.name}`);
+
+        // 4. إرسال سجل الأرشفة
+        const logsChannel = interaction.guild.channels.cache.get(LOGS_CHANNEL_ID);
+        if (logsChannel) {
+            const ticketOwner = await interaction.guild.members.fetch(ticketOwnerId).catch(() => 'المستخدم غير موجود');
+
+            const logEmbed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setTitle('📄 سجل أرشفة تكت')
+                .addFields(
+                    { name: 'صاحب التكت', value: `<@${ticketOwnerId}> (${ticketOwnerId})`, inline: true },
+                    { name: 'اسم التكت', value: channel.name, inline: true },
+                    { name: 'المغلق/المؤرشف', value: interaction.user.tag, inline: true }
+                )
+                .setTimestamp();
+
+            await logsChannel.send({ embeds: [logEmbed] });
         }
         
-        log('⌨️', `${msg.author.tag} → ${cmd.name}`);
-        await cmd.run(msg, args);
-        
-    } catch (err) {
-        log('❌', `خطأ: ${err.message}`);
+        await interaction.editReply({ content: `✅ تم إغلاق التكت وأرشفته بنجاح في <#${ARCHIVE_CATEGORY_ID}>.`, ephemeral: true });
+
+    } catch (error) {
+        console.error('فشل في إغلاق وأرشفة التكت:', error);
+        await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة إغلاق وأرشفة التكت. تأكد من صحة مُعرف فئة الأرشيف وصلاحيات البوت.', ephemeral: true });
     }
+}
+
+async function handleTicketClaim(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    if (!interaction.member.roles.cache.has(MANAGER_ROLE_ID)) {
+        return interaction.editReply({ content: '❌ لا تملك صلاحية تولي التكت. هذه الصلاحية للمسؤولين فقط.', ephemeral: true });
+    }
+
+    const channel = interaction.channel;
+    const managerRole = interaction.guild.roles.cache.get(MANAGER_ROLE_ID);
+
+    await channel.permissionOverwrites.edit(managerRole, {
+        ViewChannel: false
+    });
+
+    await channel.permissionOverwrites.edit(interaction.user.id, {
+        ViewChannel: true,
+        SendMessages: true
+    });
+
+    const newComponents = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('close_ticket')
+            .setLabel('إغلاق التكت')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('🔒')
+    );
+
+    await interaction.message.edit({ components: [newComponents] });
+
+    await channel.send(`**✋ تم تولي هذا التكت بنجاح بواسطة ${interaction.user}!**\nسيتم التعامل مع طلبك قريباً.`).then(m => m.pin());
+
+    await interaction.editReply({ content: '✅ تم تولي التكت بنجاح. الآن أنت المسؤول الوحيد عن هذا التكت (من جانب الإدارة).', ephemeral: true });
+}
+
+// ===============================================
+// 4. تسجيل الدخول
+// ===============================================
+
+client.login(BOT_TOKEN);
+
+
+// ===============================================
+// 5. تشغيل خادم وهمي (Mock Server) لـ Render Free Plan
+// ===============================================
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('Discord Bot is running and healthy!');
 });
 
-client.on('interactionCreate', async (interaction) => {
-    try {
-        if (!interaction.isButton()) return;
-        
-        const data = db.get(`confirm_${interaction.message.id}`);
-        if (!data) return;
-        
-        if (interaction.user.id !== data.mod) {
-            return await interaction.reply({ content: '❌ ليس لديك صلاحية!', ephemeral: true });
-        }
-        
-        if (interaction.customId.startsWith('ban_yes_')) {
-            const member = await interaction.guild.members.fetch(data.target).catch(() => null);
-            if (member) {
-                await member.ban({ reason: data.reason });
-                await interaction.update({ content: `🔨 تم حظر ${member.user.tag}`, components: [] });
-            }
-        } else if (interaction.customId.startsWith('ban_no_')) {
-            await interaction.update({ content: '❌ تم الإلغاء', components: [] });
-        }
-        
-        db.set(`confirm_${interaction.message.id}`, null);
-        
-    } catch (err) {
-        log('❌', `خطأ زر: ${err.message}`);
-    }
+app.listen(port, () => {
+    console.log(`Web Server listening on port ${port}`);
 });
-
-client.on('error', (err) => log('❌', `Discord Error: ${err.message}`));
-
-// ═══════════════════════════════════════════════════════════════
-// تسجيل الدخول مع timeout
-// ═══════════════════════════════════════════════════════════════
-
-log('🚀', 'جاري تسجيل الدخول...');
-
-// timeout بعد 30 ثانية
-const loginTimeout = setTimeout(() => {
-    log('💀', 'انتهى الوقت! client.login معلق');
-    log('💡', 'الأسباب المحتملة:');
-    log('💡', '1. TOKEN غلط - سوي Reset في Discord Developer Portal');
-    log('💡', '2. Intents مو مفعلة - فعل الـ 3 Privileged Intents');
-    log('💡', '3. Discord API معطل - انتظر شوي وجرب later');
-}, 30000);
-
-client.login(TOKEN).then(() => {
-    clearTimeout(loginTimeout);
-    log('✅', 'تم تسجيل الدخول بنجاح!');
-}).catch((err) => {
-    clearTimeout(loginTimeout);
-    log('❌', `فشل الدخول: ${err.message}`);
-    
-    if (err.message.includes('token')) {
-        log('💀', 'التوكن غلط!');
-    } else if (err.message.includes('intents')) {
-        log('💀', 'فعل الـ 3 Intents!');
-    }
-});
-
-// معالجة أخطاء Node.js
-process.on('unhandledRejection', (err) => log('❌', `Unhandled: ${err.message}`));
-process.on('uncaughtException', (err) => log('💀', `Exception: ${err.message}`));
