@@ -4,11 +4,9 @@ const {
     Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder,
     ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
     ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder,
-    TextInputStyle, AttachmentBuilder
+    TextInputStyle
 } = require('discord.js');
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 
 // ===============================================
 // 1. المتغيرات والتهيئة
@@ -20,8 +18,8 @@ const LOGS_CHANNEL_ID = process.env.LOGS_CHANNEL_ID;
 const PREFIX = '-';
 const ARCHIVE_CATEGORY_ID = '1449459496144470056';
 
-// مسار صورة المرتيزر (ارفعها في نفس فولدر الكود باسم ticket_image.png)
-const TICKET_IMAGE_PATH = path.join(__dirname, 'ticket_image.png');
+// رابط صورة التكت
+const TICKET_IMAGE_URL = 'https://d.top4top.io/p_3710jchmp1.png';
 
 const client = new Client({
     intents: [
@@ -147,11 +145,12 @@ client.on('messageCreate', async message => {
         }
 
         try {
-            // إرسال الصورة مع زر فتح التكت
-            const imageFile = new AttachmentBuilder(TICKET_IMAGE_PATH, { name: 'ticket_image.png' });
+            const setupEmbed = new EmbedBuilder()
+                .setImage(TICKET_IMAGE_URL)
+                .setColor('#0099ff');
 
             await message.channel.send({
-                files: [imageFile],
+                embeds: [setupEmbed],
                 components: createSetupComponents()
             });
 
@@ -160,7 +159,7 @@ client.on('messageCreate', async message => {
                 .then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
         } catch (error) {
             console.error('فشل في إرسال رسالة الإعداد:', error);
-            await message.reply({ content: '❌ حدث خطأ. تأكد أن ملف ticket_image.png موجود بجانب index.js' });
+            await message.reply({ content: '❌ حدث خطأ أثناء إرسال رسالة الإعداد.' });
         }
     }
 });
@@ -229,6 +228,61 @@ client.on('interactionCreate', async interaction => {
             await handleTicketClaim(interaction);
         } else if (interaction.customId.startsWith('rate_')) {
             await handleRating(interaction);
+        } else if (interaction.customId.startsWith('dm_note_')) {
+            // زر الملاحظة من الـ DM
+            const parts = interaction.customId.split('_');
+            const channelId = parts[parts.length - 1];
+
+            const noteModal = new ModalBuilder()
+                .setCustomId(`note_modal_${channelId}`)
+                .setTitle('📝 ملاحظة للإدارة');
+
+            const noteInput = new TextInputBuilder()
+                .setCustomId('note_text')
+                .setLabel('ملاحظتك على الخدمة')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('اكتب ملاحظتك هنا...')
+                .setRequired(true)
+                .setMaxLength(500);
+
+            noteModal.addComponents(new ActionRowBuilder().addComponents(noteInput));
+            await interaction.showModal(noteModal);
+        }
+    }
+
+    // استقبال ملاحظة من الـ DM
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('note_modal_')) {
+        const channelId = interaction.customId.replace('note_modal_', '');
+        const noteText = interaction.fields.getTextInputValue('note_text');
+
+        await interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setColor('#57F287')
+                .setDescription('✅ **تم إرسال ملاحظتك للإدارة بنجاح!**\nشكراً على وقتك. 😊')
+            ],
+            ephemeral: true
+        });
+
+        // إرسال الملاحظة للوق
+        const guild = client.guilds.cache.first();
+        const logsChannel = guild?.channels.cache.get(LOGS_CHANNEL_ID);
+        if (logsChannel) {
+            await logsChannel.send({
+                embeds: [new EmbedBuilder()
+                    .setColor('#5865F2')
+                    .setAuthor({
+                        name: `ملاحظة من ${interaction.user.tag}`,
+                        iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                    })
+                    .setTitle('📝 ملاحظة عضو على تكت')
+                    .addFields(
+                        { name: '👤 العضو', value: `${interaction.user} \`${interaction.user.tag}\``, inline: true },
+                        { name: '📋 التكت', value: `\`${channelId}\``, inline: true },
+                        { name: '💬 الملاحظة', value: noteText, inline: false }
+                    )
+                    .setTimestamp()
+                ]
+            });
         }
     }
 });
@@ -315,26 +369,96 @@ async function handleTicketClose(interaction) {
     }
 
     try {
-        // رسالة تقييم لصاحب التكت
-        const ratingEmbed = new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setTitle('⭐ كيف كانت تجربتك؟')
-            .setDescription('يسعدنا معرفة رأيك في الخدمة المقدمة. اختر تقييمك:');
+        const ticketOwner = await interaction.guild.members.fetch(ticketOwnerId).catch(() => null);
+        let dmSent = false;
 
-        await channel.send({
-            content: `<@${ticketOwnerId}>`,
-            embeds: [ratingEmbed],
-            components: [createRatingComponents()]
-        });
+        if (ticketOwner) {
+            // Embed رئيسي احترافي
+            const dmEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setAuthor({
+                    name: interaction.guild.name,
+                    iconURL: interaction.guild.iconURL({ dynamic: true })
+                })
+                .setTitle('🔒 تم إغلاق تكتك')
+                .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 256 }))
+                .setDescription(
+                    `مرحباً **${ticketOwner.user.username}** 👋\n\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `شكراً جزيلاً على تواصلك معنا،\nلقد تم إغلاق تكتك بنجاح من قِبل فريق الدعم.\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━`
+                )
+                .addFields(
+                    { name: '🏠 السيرفر', value: `\`${interaction.guild.name}\``, inline: true },
+                    { name: '📋 اسم التكت', value: `\`${channel.name}\``, inline: true },
+                    { name: '\u200b', value: '\u200b', inline: true },
+                    { name: '🔒 أُغلق بواسطة', value: `${interaction.user} \`${interaction.user.tag}\``, inline: true },
+                    { name: '🕐 وقت الإغلاق', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                    { name: '\u200b', value: '\u200b', inline: true },
+                    { name: '💡 هل تحتاج مساعدة أخرى؟', value: 'يسعدنا دائماً خدمتك! لا تتردد في فتح تكت جديد في أي وقت. 😊', inline: false }
+                )
+                .setImage('https://i.imgur.com/wSTFkRM.png') // خط فاصل جمالي
+                .setFooter({
+                    text: `${interaction.guild.name} • فريق الدعم`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setTimestamp();
 
-        // إزالة صلاحية المشاهدة عن صاحب التكت بعد 30 ثانية (يتيح له التقييم)
+            // Embed التقييم في الـ DM
+            const dmRatingEmbed = new EmbedBuilder()
+                .setColor('#FEE75C')
+                .setTitle('⭐ كيف كانت تجربتك معنا؟')
+                .setDescription(
+                    `رأيك يهمنا كثيراً ويساعدنا على تحسين خدماتنا.\n\n` +
+                    `**اختر تقييمك:**`
+                )
+                .setFooter({ text: 'يمكنك أيضاً إضافة ملاحظة للإدارة بالضغط على الزر أدناه' });
+
+            const noteButton = new ButtonBuilder()
+                .setCustomId(`dm_note_${ticketOwnerId}_${channel.id}`)
+                .setLabel('إضافة ملاحظة للإدارة')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('📝');
+
+            const noteRow = new ActionRowBuilder().addComponents(noteButton);
+
+            await ticketOwner.send({
+                embeds: [dmEmbed, dmRatingEmbed],
+                components: [createRatingComponents(), noteRow]
+            })
+            .then(() => { dmSent = true; })
+            .catch(() => { dmSent = false; });
+        }
+
+        // إرسال للوق
+        const logsChannel = interaction.guild.channels.cache.get(LOGS_CHANNEL_ID);
+        if (logsChannel) {
+            await logsChannel.send({
+                embeds: [new EmbedBuilder()
+                    .setColor(dmSent ? '#57F287' : '#ED4245')
+                    .setAuthor({
+                        name: `إغلاق تكت — ${channel.name}`,
+                        iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                    })
+                    .setDescription(
+                        `${dmSent ? '✅ تم إرسال رسالة DM بنجاح' : '❌ فشل الإرسال (الخاص مغلق)'}\n` +
+                        `👤 صاحب التكت: <@${ticketOwnerId}>\n` +
+                        `🔒 أُغلق بواسطة: ${interaction.user}`
+                    )
+                    .setTimestamp()
+                ]
+            });
+        }
+
+        // أرشفة بعد 30 ثانية
         setTimeout(async () => {
-            await channel.permissionOverwrites.edit(ticketOwnerId, { ViewChannel: false })
-                .catch(() => {});
+            await channel.permissionOverwrites.edit(ticketOwnerId, { ViewChannel: false }).catch(() => {});
             await archiveChannel(channel, interaction, ticketOwnerId);
         }, 30000);
 
-        await interaction.editReply({ content: '✅ سيتم إغلاق التكت خلال 30 ثانية بعد التقييم.' });
+        await interaction.editReply({
+            content: `✅ سيتم إغلاق التكت خلال 30 ثانية.\n${dmSent ? '📨 تم إرسال رسالة خاصة للعضو مع التقييم.' : '⚠️ لم يتم إرسال رسالة خاصة (الخاص مغلق).'}`
+        });
 
     } catch (error) {
         console.error('فشل في إغلاق التكت:', error);
@@ -417,24 +541,39 @@ async function handleRating(interaction) {
 
     const ratingEmbed = new EmbedBuilder()
         .setColor('#57F287')
-        .setDescription(`${starsText}\n**شكراً على تقييمك!** تقييمك يساعدنا على تحسين خدماتنا.`);
+        .setTitle('✅ تم تسجيل تقييمك')
+        .setDescription(`${starsText}\n\n**شكراً على تقييمك!**\nرأيك يساعدنا على تحسين خدماتنا باستمرار. 😊`)
+        .setTimestamp();
 
-    await interaction.update({ embeds: [ratingEmbed], components: [] });
+    await interaction.update({ embeds: [interaction.message.embeds[0], ratingEmbed], components: [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(interaction.message.components[1]?.components[0]?.customId || 'dm_note_done')
+                .setLabel('إضافة ملاحظة للإدارة')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('📝')
+        )
+    ]});
 
     // إرسال التقييم للوق
-    const logsChannel = interaction.guild.channels.cache.get(LOGS_CHANNEL_ID);
+    const guild = client.guilds.cache.first();
+    const logsChannel = guild?.channels.cache.get(LOGS_CHANNEL_ID);
     if (logsChannel) {
-        const logEmbed = new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setTitle('⭐ تقييم جديد')
-            .addFields(
-                { name: '👤 المستخدم', value: `${interaction.user}`, inline: true },
-                { name: '⭐ التقييم', value: starsText, inline: true },
-                { name: '📋 التكت', value: interaction.channel.name, inline: true }
-            )
-            .setTimestamp();
-
-        await logsChannel.send({ embeds: [logEmbed] });
+        await logsChannel.send({
+            embeds: [new EmbedBuilder()
+                .setColor('#FEE75C')
+                .setAuthor({
+                    name: `تقييم من ${interaction.user.tag}`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setTitle('⭐ تقييم جديد')
+                .addFields(
+                    { name: '👤 المستخدم', value: `${interaction.user}`, inline: true },
+                    { name: '⭐ التقييم', value: starsText, inline: true }
+                )
+                .setTimestamp()
+            ]
+        });
     }
 }
 
