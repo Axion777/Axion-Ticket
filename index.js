@@ -4,7 +4,7 @@ const {
     Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder,
     ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
     ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder,
-    TextInputStyle, ActivityType
+    TextInputStyle, ActivityType, MessageFlags
 } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
@@ -738,6 +738,7 @@ client.on('messageCreate', async message => {
 // ===============================================
 
 client.on('interactionCreate', async interaction => {
+  try {
 
     // زر فتح المنيو
     if (interaction.isButton() && interaction.customId === 'open_ticket_menu') {
@@ -761,7 +762,7 @@ client.on('interactionCreate', async interaction => {
                 ]
             }).catch(() => {});
         }
-        return interaction.reply({ content: '👇 اختر نوع الخدمة:', components: createSelectMenuComponents(), ephemeral: true });
+        return interaction.reply({ content: '👇 اختر نوع الخدمة:', components: createSelectMenuComponents(), flags: MessageFlags.Ephemeral });
     }
 
     // اختيار الخدمة → اختيار الأولوية
@@ -827,7 +828,7 @@ client.on('interactionCreate', async interaction => {
 
     // ─── قبول التكت ───
     if (interaction.isButton() && interaction.customId.startsWith('accept_ticket_')) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!interaction.member.roles.cache.has(MANAGER_ROLE_ID) && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
             return interaction.editReply({ content: '❌ هذه الصلاحية للمسؤولين فقط.' });
@@ -885,7 +886,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton() && interaction.customId.startsWith('reject_ticket_')) {
         const msgId = interaction.customId.split('_')[2];
         if (!pendingTickets.has(msgId))
-            return interaction.reply({ content: '❌ هذا الطلب لم يعد متاحاً.', ephemeral: true });
+            return interaction.reply({ content: '❌ هذا الطلب لم يعد متاحاً.', flags: MessageFlags.Ephemeral });
 
         const modal = new ModalBuilder()
             .setCustomId(`reject_modal_${msgId}`)
@@ -899,7 +900,7 @@ client.on('interactionCreate', async interaction => {
 
     // استقبال سبب الرفض
     if (interaction.isModalSubmit() && interaction.customId.startsWith('reject_modal_')) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const msgId  = interaction.customId.replace('reject_modal_', '');
         const reason = interaction.fields.getTextInputValue('reject_reason');
         const data   = pendingTickets.get(msgId);
@@ -977,7 +978,7 @@ client.on('interactionCreate', async interaction => {
 
         await interaction.reply({
             embeds: [new EmbedBuilder().setColor('#57F287').setDescription('✅ **تم إرسال ملاحظتك للإدارة بنجاح!** شكراً 😊')],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const guild = client.guilds.cache.first();
@@ -993,6 +994,11 @@ client.on('interactionCreate', async interaction => {
             .setTimestamp()
         );
     }
+
+  } catch (err) {
+    if (err?.code === 10062) return; // interaction انتهت صلاحيتها — تجاهل
+    console.error('Interaction error:', err);
+  }
 });
 
 // ===============================================
@@ -1000,7 +1006,7 @@ client.on('interactionCreate', async interaction => {
 // ===============================================
 
 async function sendTicketRequest(interaction, serviceKey, priorityKey, ticketTitle, ticketDescription) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guild      = interaction.guild;
     const member     = interaction.member;
@@ -1022,6 +1028,7 @@ async function sendTicketRequest(interaction, serviceKey, priorityKey, ticketTit
         return interaction.editReply({ content: '❌ لم يتم العثور على روم الطلبات.' });
 
     try {
+        // إرسال الرسالة أولاً بدون أزرار لنحصل على الـ ID
         const reqMsg = await reqChannel.send({
             content: `<@&${MANAGER_ROLE_ID}>`,
             embeds: [new EmbedBuilder()
@@ -1038,22 +1045,10 @@ async function sendTicketRequest(interaction, serviceKey, priorityKey, ticketTit
                 )
                 .setFooter({ text: 'قبول أو رفض الطلب باستخدام الأزرار أدناه' })
                 .setTimestamp()
-            ],
-            components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`accept_ticket_${reqMsg?.id || 'tmp'}_${member.user.id}`)
-                    .setLabel('قبول')
-                    .setStyle(ButtonStyle.Success)
-                    .setEmoji('✅'),
-                new ButtonBuilder()
-                    .setCustomId(`reject_ticket_${reqMsg?.id || 'tmp'}_${member.user.id}`)
-                    .setLabel('رفض')
-                    .setStyle(ButtonStyle.Danger)
-                    .setEmoji('❌')
-            )]
+            ]
         });
 
-        // تحديث الـ customId بالـ msgId الحقيقي
+        // الآن نعرف الـ ID — نضيف الأزرار
         await reqMsg.edit({
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -1207,7 +1202,7 @@ async function openTicket(interaction, ticketData, adminUser) {
 // ===============================================
 
 async function handleTicketClose(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const isManager = interaction.member.roles.cache.has(MANAGER_ROLE_ID);
     const isAdmin   = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
@@ -1392,6 +1387,12 @@ async function handleRating(interaction) {
 // ===============================================
 // 12. تسجيل الدخول + خادم Render
 // ===============================================
+
+// منع انهيار البوت من أي خطأ غير متوقع
+process.on('unhandledRejection', err => {
+    if (err?.code === 10062) return; // Unknown interaction — طبيعي بعد restart
+    console.error('Unhandled rejection:', err);
+});
 
 client.login(BOT_TOKEN);
 
